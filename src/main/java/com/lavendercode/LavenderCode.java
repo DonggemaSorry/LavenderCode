@@ -32,7 +32,18 @@ public class LavenderCode {
             }
         }
 
-        LlmConfig config = ConfigLoader.load(configPath);
+        LlmConfig config;
+        try {
+            config = ConfigLoader.load(configPath);
+        } catch (Exception e) {
+            System.err.println("Failed to load configuration: " + e.getMessage());
+            if (!java.nio.file.Files.exists(configPath)) {
+                System.err.println("Run: copy config.yaml.example config.yaml");
+                System.err.println("Then edit config.yaml with your API key.");
+            }
+            System.exit(1);
+            return;
+        }
         System.out.println("Loaded config for protocol: " + config.provider().protocol());
         System.out.println("Model: " + config.provider().model());
 
