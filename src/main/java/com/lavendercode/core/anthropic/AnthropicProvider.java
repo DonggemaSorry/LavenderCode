@@ -32,7 +32,11 @@ public class AnthropicProvider implements LlmProvider {
 
     @Override
     public StreamEventIterator streamChat(List<Message> history, LlmConfig config) {
-        String endpoint = config.provider().baseUrl() + "/v1/messages";
+        String baseUrl = config.provider().baseUrl();
+        if (baseUrl.endsWith("/")) {
+            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+        }
+        String endpoint = baseUrl + "/v1/messages";
         String requestBody = buildRequestBody(history, config);
 
         Request request = new Request.Builder()
