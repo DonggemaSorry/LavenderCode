@@ -16,6 +16,7 @@ public class TuiApplication {
     private final LlmProvider provider;
     private final SessionManager sessionManager;
     private final String modelName;
+    private final com.lavendercode.core.config.LlmConfig config;
     private final Screen screen;
     private final WindowBasedTextGUI textGUI;
     private final Label chatArea;
@@ -25,10 +26,12 @@ public class TuiApplication {
     private final AtomicBoolean running;
 
     public TuiApplication(LlmProvider provider, SessionManager sessionManager,
-                          String modelName, Screen screen) throws IOException {
+                          String modelName, com.lavendercode.core.config.LlmConfig config,
+                          Screen screen) throws IOException {
         this.provider = provider;
         this.sessionManager = sessionManager;
         this.modelName = modelName;
+        this.config = config;
         this.screen = screen;
         this.isProcessing = new AtomicBoolean(false);
         this.running = new AtomicBoolean(true);
@@ -118,14 +121,9 @@ public class TuiApplication {
         new Thread(() -> {
             try {
                 appendToChat("AI: ");
-                com.lavendercode.core.config.LlmConfig config =
-                    com.lavendercode.core.config.ConfigLoader.load(
-                        java.nio.file.Path.of("config.yaml")
-                    );
-
                 StreamEventIterator iterator = provider.streamChat(
                     sessionManager.getHistory(),
-                    config
+                    this.config
                 );
 
                 StringBuilder fullResponse = new StringBuilder();

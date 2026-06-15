@@ -40,7 +40,11 @@ class TuiApplicationTest {
             }
         };
 
-        TuiApplication app = new TuiApplication(mockProvider, sessionManager, "test-model", screen);
+        com.lavendercode.core.config.LlmConfig mockConfig = new com.lavendercode.core.config.LlmConfig(
+            new com.lavendercode.core.config.ProviderConfig("test", "test-model", "http://localhost", "key"),
+            null
+        );
+        TuiApplication app = new TuiApplication(mockProvider, sessionManager, "test-model", mockConfig, screen);
 
         assertThat(app).isNotNull();
 
