@@ -6,6 +6,7 @@ import com.googlecode.lanterna.screen.Screen;
 import com.googlecode.lanterna.screen.TerminalScreen;
 import com.googlecode.lanterna.terminal.swing.SwingTerminalFontConfiguration;
 import com.googlecode.lanterna.terminal.swing.SwingTerminalFrame;
+import com.googlecode.lanterna.terminal.swing.TerminalEmulatorAutoCloseTrigger;
 import com.googlecode.lanterna.terminal.swing.TerminalEmulatorColorConfiguration;
 import com.googlecode.lanterna.terminal.swing.TerminalEmulatorDeviceConfiguration;
 import com.lavendercode.core.config.ConfigLoader;
@@ -16,7 +17,9 @@ import com.lavendercode.chat.session.InMemorySessionManager;
 import com.lavendercode.chat.session.SessionManager;
 import com.lavendercode.chat.tui.TuiApplication;
 
+import javax.swing.SwingUtilities;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Path;
 
 public class LavenderCode {
@@ -72,8 +75,23 @@ public class LavenderCode {
             "LavenderCode",
             deviceConfig,
             SwingTerminalFontConfiguration.getDefault(),
-            TerminalEmulatorColorConfiguration.getDefault()
+            TerminalEmulatorColorConfiguration.getDefault(),
+            TerminalEmulatorAutoCloseTrigger.CloseOnExitPrivateMode
         );
+
+        // Pack and show on EDT so the window has non-zero dimensions before startScreen()
+        try {
+            SwingUtilities.invokeAndWait(() -> {
+                frame.pack();
+                frame.setVisible(true);
+            });
+        } catch (InvocationTargetException e) {
+            throw new IOException("Failed to initialize Swing window", e.getCause());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while initializing Swing window", e);
+        }
+
         return new TerminalScreen(frame);
     }
 }
