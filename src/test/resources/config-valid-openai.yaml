@@ -1,0 +1,8 @@
+provider:
+  protocol: openai
+  model: gpt-4o
+  base_url: https://api.openai.com
+  api_key: sk-test-key
+
+options:
+  max_tokens: 2048

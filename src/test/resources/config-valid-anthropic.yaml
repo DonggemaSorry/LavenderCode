@@ -1,0 +1,12 @@
+provider:
+  protocol: anthropic
+  model: claude-sonnet-4-20250514
+  base_url: https://api.anthropic.com
+  api_key: sk-ant-test-key
+
+options:
+  max_tokens: 4096
+  system_prompt: "You are a helpful assistant."
+  thinking:
+    enabled: true
+    budget_tokens: 4000
