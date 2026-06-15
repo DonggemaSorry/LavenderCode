@@ -2,6 +2,8 @@ package com.lavendercode;
 
 import com.googlecode.lanterna.terminal.DefaultTerminalFactory;
 import com.googlecode.lanterna.screen.Screen;
+import com.googlecode.lanterna.screen.TerminalScreen;
+import com.googlecode.lanterna.terminal.swing.SwingTerminalFrame;
 import com.lavendercode.core.config.ConfigLoader;
 import com.lavendercode.core.config.LlmConfig;
 import com.lavendercode.core.provider.LlmProvider;
@@ -10,6 +12,7 @@ import com.lavendercode.chat.session.InMemorySessionManager;
 import com.lavendercode.chat.session.SessionManager;
 import com.lavendercode.chat.tui.TuiApplication;
 
+import java.io.IOException;
 import java.nio.file.Path;
 
 public class LavenderCode {
@@ -30,7 +33,7 @@ public class LavenderCode {
 
         SessionManager sessionManager = new InMemorySessionManager();
 
-        Screen screen = new DefaultTerminalFactory().createScreen();
+        Screen screen = createScreen();
 
         TuiApplication app = new TuiApplication(
             provider,
@@ -41,5 +44,15 @@ public class LavenderCode {
         );
 
         app.run();
+    }
+
+    private static Screen createScreen() throws IOException {
+        try {
+            return new DefaultTerminalFactory().createScreen();
+        } catch (IOException e) {
+            System.out.println("Native terminal unavailable, using Swing emulator...");
+            SwingTerminalFrame frame = new SwingTerminalFrame("LavenderCode");
+            return new TerminalScreen(frame);
+        }
     }
 }
