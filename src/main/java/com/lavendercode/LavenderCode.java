@@ -1,9 +1,13 @@
 package com.lavendercode;
 
+import com.googlecode.lanterna.TextColor;
 import com.googlecode.lanterna.terminal.DefaultTerminalFactory;
 import com.googlecode.lanterna.screen.Screen;
 import com.googlecode.lanterna.screen.TerminalScreen;
+import com.googlecode.lanterna.terminal.swing.SwingTerminalFontConfiguration;
 import com.googlecode.lanterna.terminal.swing.SwingTerminalFrame;
+import com.googlecode.lanterna.terminal.swing.TerminalEmulatorColorConfiguration;
+import com.googlecode.lanterna.terminal.swing.TerminalEmulatorDeviceConfiguration;
 import com.lavendercode.core.config.ConfigLoader;
 import com.lavendercode.core.config.LlmConfig;
 import com.lavendercode.core.provider.LlmProvider;
@@ -47,12 +51,29 @@ public class LavenderCode {
     }
 
     private static Screen createScreen() throws IOException {
-        try {
-            return new DefaultTerminalFactory().createScreen();
-        } catch (IOException e) {
-            System.out.println("Native terminal unavailable, using Swing emulator...");
-            SwingTerminalFrame frame = new SwingTerminalFrame("LavenderCode");
-            return new TerminalScreen(frame);
+        String os = System.getProperty("os.name", "").toLowerCase();
+
+        if (os.contains("win")) {
+            System.out.println("Windows detected, using Swing terminal emulator...");
+            return createSwingScreen();
         }
+
+        return new DefaultTerminalFactory().createScreen();
+    }
+
+    private static Screen createSwingScreen() throws IOException {
+        TerminalEmulatorDeviceConfiguration deviceConfig = new TerminalEmulatorDeviceConfiguration(
+            100, 30,
+            TerminalEmulatorDeviceConfiguration.CursorStyle.UNDER_BAR,
+            TextColor.ANSI.WHITE,
+            true
+        );
+        SwingTerminalFrame frame = new SwingTerminalFrame(
+            "LavenderCode",
+            deviceConfig,
+            SwingTerminalFontConfiguration.getDefault(),
+            TerminalEmulatorColorConfiguration.getDefault()
+        );
+        return new TerminalScreen(frame);
     }
 }
