@@ -23,7 +23,6 @@ public class TuiApplication {
     private final Label statusBar;
     private final TextBox inputBox;
     private final AtomicBoolean isProcessing;
-    private final AtomicBoolean running;
 
     public TuiApplication(LlmProvider provider, SessionManager sessionManager,
                           String modelName, com.lavendercode.core.config.LlmConfig config,
@@ -34,7 +33,6 @@ public class TuiApplication {
         this.config = config;
         this.screen = screen;
         this.isProcessing = new AtomicBoolean(false);
-        this.running = new AtomicBoolean(true);
 
         this.textGUI = new MultiWindowTextGUI(screen);
 
@@ -67,6 +65,9 @@ public class TuiApplication {
 
         window.setComponent(mainPanel);
 
+        // Give the TextBox focus so it receives keyboard input
+        inputBox.takeFocus();
+
         // Handle input submission
         inputBox.setInputFilter((interactable, keyStroke) -> {
             if (keyStroke.getKeyType() == KeyType.Enter) {
@@ -87,12 +88,7 @@ public class TuiApplication {
     public void run() throws IOException {
         screen.startScreen();
         try {
-            while (running.get()) {
-                textGUI.updateScreen();
-                Thread.sleep(50);
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            textGUI.getActiveWindow().waitUntilClosed();
         } finally {
             screen.stopScreen();
         }
@@ -184,14 +180,8 @@ public class TuiApplication {
     }
 
     private void handleExit() {
-        running.set(false);
         if (textGUI.getActiveWindow() != null) {
             textGUI.getActiveWindow().close();
-        }
-        try {
-            screen.stopScreen();
-        } catch (IOException e) {
-            // ignore
         }
     }
 }
