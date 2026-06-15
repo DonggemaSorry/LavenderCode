@@ -15,4 +15,13 @@ public record Options(
     public Options() {
         this(4096, "", new ThinkingConfig());
     }
+
+    public Options {
+        if (systemPrompt == null) {
+            systemPrompt = "";
+        }
+        if (thinking == null) {
+            thinking = new ThinkingConfig();
+        }
+    }
 }
