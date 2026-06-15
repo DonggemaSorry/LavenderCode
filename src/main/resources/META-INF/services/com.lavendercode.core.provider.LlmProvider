@@ -1,1 +1,2 @@
 com.lavendercode.core.anthropic.AnthropicProvider
+com.lavendercode.core.openai.OpenAIProvider
