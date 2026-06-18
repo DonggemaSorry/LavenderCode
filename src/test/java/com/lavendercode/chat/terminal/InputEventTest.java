@@ -18,11 +18,14 @@ class InputEventTest {
         var event = new InputEvent.ExecuteCommand(CommandType.HELP, "");
         assertThat(event.type()).isEqualTo(CommandType.HELP);
         assertThat(event.args()).isEmpty();
+
+        var event2 = new InputEvent.ExecuteCommand(CommandType.THEME, "dark");
+        assertThat(event2.args()).isEqualTo("dark");
     }
 
     @Test
     void shouldCreateShutdown() {
-        assertThat(new InputEvent.Shutdown()).isNotNull();
+        assertThat(new InputEvent.Shutdown()).isInstanceOf(InputEvent.class);
     }
 
     @Test
@@ -31,11 +34,22 @@ class InputEventTest {
         InputEvent cmd     = new InputEvent.ExecuteCommand(CommandType.EXIT, "x");
         InputEvent shutdown = new InputEvent.Shutdown();
 
-        String result = switch (send) {
-            case InputEvent.SendMessage(var t)  -> "msg:" + t;
+        assertThat(switch (send) {
+            case InputEvent.SendMessage(var t) -> "msg:" + t;
             case InputEvent.ExecuteCommand(var c, var a) -> "cmd:" + c;
-            case InputEvent.Shutdown()          -> "shutdown";
-        };
-        assertThat(result).isEqualTo("msg:x");
+            case InputEvent.Shutdown() -> "shutdown";
+        }).isEqualTo("msg:x");
+
+        assertThat(switch (cmd) {
+            case InputEvent.SendMessage(var t) -> "msg:" + t;
+            case InputEvent.ExecuteCommand(var c, var a) -> "cmd:" + c;
+            case InputEvent.Shutdown() -> "shutdown";
+        }).isEqualTo("cmd:EXIT");
+
+        assertThat(switch (shutdown) {
+            case InputEvent.SendMessage(var t) -> "msg:" + t;
+            case InputEvent.ExecuteCommand(var c, var a) -> "cmd:" + c;
+            case InputEvent.Shutdown() -> "shutdown";
+        }).isEqualTo("shutdown");
     }
 }
