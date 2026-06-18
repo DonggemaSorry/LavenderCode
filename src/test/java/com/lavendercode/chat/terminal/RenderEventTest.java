@@ -123,4 +123,40 @@ class RenderEventTest {
         assertThat(new RenderEvent.ScrollDelta(1)).isInstanceOf(RenderEvent.class);
         assertThat(new RenderEvent.Shutdown()).isInstanceOf(RenderEvent.class);
     }
+
+    @Test
+    void appendToMessageShouldRejectNull() {
+        assertThatThrownBy(() -> new RenderEvent.AppendToMessage(null))
+            .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void addUserMessageShouldRejectNull() {
+        assertThatThrownBy(() -> new RenderEvent.AddUserMessage(null))
+            .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void addSystemMessageShouldRejectNull() {
+        assertThatThrownBy(() -> new RenderEvent.AddSystemMessage(null))
+            .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void thinkDeltaShouldRejectNull() {
+        assertThatThrownBy(() -> new RenderEvent.ThinkDelta(null))
+            .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void themeChangeShouldRejectNull() {
+        assertThatThrownBy(() -> new RenderEvent.ThemeChange(null))
+            .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void windowResizeShouldRejectZeroRows() {
+        assertThatThrownBy(() -> new RenderEvent.WindowResize(80, 0))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
 }
