@@ -62,6 +62,13 @@
             <version>3.1.2</version>
         </dependency>
 
+        <!-- JLine3 Native Terminal -->
+        <dependency>
+            <groupId>org.jline</groupId>
+            <artifactId>jline</artifactId>
+            <version>3.26.3</version>
+        </dependency>
+
         <!-- Testing -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
