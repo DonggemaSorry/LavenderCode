@@ -33,6 +33,8 @@ public record Theme(String name, Map<StyleCatalog, AttributedStyle> styles) {
         map.put(StyleCatalog.SCROLLBAR_THUMB,   AttributedStyle.DEFAULT.foreground(255, 255, 255).bold());
         map.put(StyleCatalog.PROMPT,            AttributedStyle.DEFAULT.foreground(0, 255, 0).bold());
         map.put(StyleCatalog.INPUT_TEXT,        AttributedStyle.DEFAULT.foreground(255, 255, 255));
+        map.put(StyleCatalog.INPUT_BG,          AttributedStyle.DEFAULT.foreground(255, 255, 255).background(60, 60, 60));
+        map.put(StyleCatalog.INPUT_BORDER,      AttributedStyle.DEFAULT.foreground(136, 136, 136));
         return new Theme("dark", Collections.unmodifiableMap(map));
     }
 
@@ -50,6 +52,8 @@ public record Theme(String name, Map<StyleCatalog, AttributedStyle> styles) {
         map.put(StyleCatalog.SCROLLBAR_THUMB,   AttributedStyle.DEFAULT.foreground(0, 0, 0).bold());
         map.put(StyleCatalog.PROMPT,            AttributedStyle.DEFAULT.foreground(0, 170, 0).bold());
         map.put(StyleCatalog.INPUT_TEXT,        AttributedStyle.DEFAULT.foreground(0, 0, 0));
+        map.put(StyleCatalog.INPUT_BG,          AttributedStyle.DEFAULT.foreground(0, 0, 0).background(235, 235, 235));
+        map.put(StyleCatalog.INPUT_BORDER,      AttributedStyle.DEFAULT.foreground(153, 153, 153));
         return new Theme("light", Collections.unmodifiableMap(map));
     }
 }

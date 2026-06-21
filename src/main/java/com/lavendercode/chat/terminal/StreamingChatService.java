@@ -2,6 +2,8 @@ package com.lavendercode.chat.terminal;
 
 import com.lavendercode.core.config.LlmConfig;
 import com.lavendercode.core.provider.*;
+import com.lavendercode.core.sse.SseStreamEventIterator;
+
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -20,14 +22,19 @@ public class StreamingChatService implements ChatService {
                                  List<Message> history,
                                  LlmConfig config,
                                  Consumer<DeltaEvent> onDelta) {
-        StreamEventIterator iterator = provider.streamChat(history, config);
-        RequestContext ctx = new RequestContext(null, iterator);
+        RequestContext ctx = new RequestContext(null, null);
 
         ioPool.submit(() -> {
+            StreamEventIterator iterator = null;
             try {
+                iterator = provider.streamChat(history, config);
+                ctx.bind(iterator, iterator instanceof SseStreamEventIterator sse ? sse.call() : null);
+
                 while (iterator.hasNext() && !ctx.isCancelled()) {
                     StreamEvent se = iterator.next();
-                    if (ctx.isCancelled()) break;
+                    if (ctx.isCancelled()) {
+                        break;
+                    }
                     DeltaEvent de = toDeltaEvent(se);
                     if (de != null) {
                         onDelta.accept(de);
@@ -41,7 +48,9 @@ public class StreamingChatService implements ChatService {
                     onDelta.accept(new DeltaEvent.Error(e.getMessage(), 0));
                 }
             } finally {
-                iterator.close();
+                if (iterator != null) {
+                    iterator.close();
+                }
             }
         });
 

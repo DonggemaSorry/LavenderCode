@@ -1,6 +1,7 @@
 package com.lavendercode.chat.terminal;
 
 import java.util.Objects;
+import java.util.concurrent.CountDownLatch;
 
 public sealed interface RenderEvent
     permits RenderEvent.AppendToMessage,
@@ -10,11 +11,15 @@ public sealed interface RenderEvent
             RenderEvent.ThinkDelta,
             RenderEvent.ScrollTo,
             RenderEvent.ScrollDelta,
+            RenderEvent.ScrollPageUp,
+            RenderEvent.ScrollPageDown,
             RenderEvent.ScrollAutoReset,
             RenderEvent.ClearChat,
             RenderEvent.WindowResize,
             RenderEvent.ThemeChange,
             RenderEvent.StatusUpdate,
+            RenderEvent.RefreshInputChrome,
+            RenderEvent.UpdateInputDraft,
             RenderEvent.RefreshAll,
             RenderEvent.Shutdown {
 
@@ -44,6 +49,10 @@ public sealed interface RenderEvent
 
     record ScrollDelta(int offset) implements RenderEvent {}
 
+    record ScrollPageUp() implements RenderEvent {}
+
+    record ScrollPageDown() implements RenderEvent {}
+
     record ScrollAutoReset() implements RenderEvent {}
 
     record ClearChat() implements RenderEvent {}
@@ -61,6 +70,23 @@ public sealed interface RenderEvent
 
     record StatusUpdate(String model, int tokenCount, boolean isEstimating) implements RenderEvent {
         public StatusUpdate { Objects.requireNonNull(model); }
+    }
+
+    record RefreshInputChrome(CountDownLatch done) implements RenderEvent {
+        public RefreshInputChrome() { this(null); }
+    }
+
+    record UpdateInputDraft(String draft, int cursorIndex, CountDownLatch done) implements RenderEvent {
+        public UpdateInputDraft(String draft, int cursorIndex) {
+            this(draft != null ? draft : "", cursorIndex, null);
+        }
+
+        public UpdateInputDraft {
+            Objects.requireNonNull(draft);
+            if (cursorIndex < 0 || cursorIndex > draft.length()) {
+                throw new IllegalArgumentException("cursorIndex out of range");
+            }
+        }
     }
 
     record RefreshAll() implements RenderEvent {}

@@ -103,6 +103,45 @@ class RenderEventTest {
         assertThat(e.isEstimating()).isTrue();
     }
 
+    // ---- RefreshInputChrome ----
+    @Test
+    void refreshInputChromeShouldInstantiate() {
+        assertThat(new RenderEvent.RefreshInputChrome()).isInstanceOf(RenderEvent.class);
+    }
+
+    @Test
+    void refreshInputChromeShouldAcceptLatch() {
+        var latch = new java.util.concurrent.CountDownLatch(1);
+        var e = new RenderEvent.RefreshInputChrome(latch);
+        assertThat(e.done()).isSameAs(latch);
+    }
+
+    // ---- ScrollPageUp / ScrollPageDown ----
+    @Test
+    void scrollPageUpShouldInstantiate() {
+        assertThat(new RenderEvent.ScrollPageUp()).isInstanceOf(RenderEvent.class);
+    }
+
+    @Test
+    void scrollPageDownShouldInstantiate() {
+        assertThat(new RenderEvent.ScrollPageDown()).isInstanceOf(RenderEvent.class);
+    }
+
+    // ---- UpdateInputDraft ----
+    @Test
+    void updateInputDraftShouldStoreFields() {
+        var e = new RenderEvent.UpdateInputDraft("hello", 2);
+        assertThat(e.draft()).isEqualTo("hello");
+        assertThat(e.cursorIndex()).isEqualTo(2);
+    }
+
+    @Test
+    void updateInputDraftShouldRejectInvalidCursor() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                () -> new RenderEvent.UpdateInputDraft("hi", 5))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
     // ---- RefreshAll ----
     @Test
     void refreshAllShouldInstantiate() {

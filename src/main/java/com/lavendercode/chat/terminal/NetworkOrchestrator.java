@@ -37,6 +37,7 @@ public class NetworkOrchestrator {
     }
 
     public void run() {
+        safePut(new RenderEvent.StatusUpdate(modelName, 0, false));
         try {
             while (true) {
                 InputEvent event = inputQueue.poll(100, TimeUnit.MILLISECONDS);
@@ -108,9 +109,14 @@ public class NetworkOrchestrator {
                       /theme dark - Switch to dark theme
                       /theme light- Switch to light theme
                     Keyboard:
+                      ↑/↓         - Scroll one line
+                      PageUp/Down - Scroll one page
+                      Home/End    - Jump to top/bottom
+                      Mouse wheel - Scroll message area
                       Ctrl+C      - Cancel current request
                       Ctrl+D (empty) - Exit
-                      Alt+Enter   - Insert newline"""));
+                      Enter       - Send message
+                      Ctrl+J      - Insert newline"""));
             }
             case SCROLL -> {
                 deltaBuffer.forceFlush();
@@ -165,8 +171,8 @@ public class NetworkOrchestrator {
         return switch (args.trim().toLowerCase()) {
             case "up"        -> new RenderEvent.ScrollDelta(-1);
             case "down"      -> new RenderEvent.ScrollDelta(1);
-            case "page-up"   -> new RenderEvent.ScrollDelta(-20);
-            case "page-down" -> new RenderEvent.ScrollDelta(20);
+            case "page-up"   -> new RenderEvent.ScrollPageUp();
+            case "page-down" -> new RenderEvent.ScrollPageDown();
             case "top"       -> new RenderEvent.ScrollTo(0);
             case "bottom"    -> new RenderEvent.ScrollAutoReset();
             default          -> null;

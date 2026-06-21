@@ -53,14 +53,22 @@ class NetworkOrchestratorTest {
         }).start();
     }
 
+    private RenderEvent pollUntil(Class<? extends RenderEvent> type) throws InterruptedException {
+        RenderEvent event;
+        while ((event = renderQueue.poll(2, TimeUnit.SECONDS)) != null) {
+            if (type.isInstance(event)) return event;
+        }
+        return null;
+    }
+
     @Test
     void sendMessageShouldPutAddUserMessage() throws Exception {
         new Thread(orchestrator::run).start();
 
         inputQueue.put(new InputEvent.SendMessage("hello"));
 
-        RenderEvent event = renderQueue.poll(2, TimeUnit.SECONDS);
-        assertThat(event).isInstanceOf(RenderEvent.AddUserMessage.class);
+        RenderEvent event = pollUntil(RenderEvent.AddUserMessage.class);
+        assertThat(event).isNotNull();
         assertThat(((RenderEvent.AddUserMessage) event).text()).isEqualTo("hello");
     }
 
@@ -70,7 +78,8 @@ class NetworkOrchestratorTest {
 
         inputQueue.put(new InputEvent.ExecuteCommand(InputEvent.CommandType.CLEAR, ""));
 
-        RenderEvent event = renderQueue.poll(2, TimeUnit.SECONDS);
+        RenderEvent event = pollUntil(RenderEvent.ClearChat.class);
+        assertThat(event).isNotNull();
         assertThat(event).isInstanceOf(RenderEvent.ClearChat.class);
     }
 
@@ -80,8 +89,8 @@ class NetworkOrchestratorTest {
 
         inputQueue.put(new InputEvent.ExecuteCommand(InputEvent.CommandType.THEME, "light"));
 
-        RenderEvent event = renderQueue.poll(2, TimeUnit.SECONDS);
-        assertThat(event).isInstanceOf(RenderEvent.ThemeChange.class);
+        RenderEvent event = pollUntil(RenderEvent.ThemeChange.class);
+        assertThat(event).isNotNull();
         assertThat(((RenderEvent.ThemeChange) event).theme().name()).isEqualTo("light");
     }
 
@@ -90,7 +99,8 @@ class NetworkOrchestratorTest {
         new Thread(orchestrator::run).start();
         inputQueue.put(new InputEvent.ExecuteCommand(InputEvent.CommandType.EXIT, ""));
 
-        RenderEvent event = renderQueue.poll(2, TimeUnit.SECONDS);
+        RenderEvent event = pollUntil(RenderEvent.Shutdown.class);
+        assertThat(event).isNotNull();
         assertThat(event).isInstanceOf(RenderEvent.Shutdown.class);
     }
 
@@ -100,8 +110,8 @@ class NetworkOrchestratorTest {
 
         inputQueue.put(new InputEvent.ExecuteCommand(InputEvent.CommandType.HELP, ""));
 
-        RenderEvent event = renderQueue.poll(2, TimeUnit.SECONDS);
-        assertThat(event).isInstanceOf(RenderEvent.AddSystemMessage.class);
+        RenderEvent event = pollUntil(RenderEvent.AddSystemMessage.class);
+        assertThat(event).isNotNull();
         assertThat(((RenderEvent.AddSystemMessage) event).text()).contains("/exit");
     }
 }

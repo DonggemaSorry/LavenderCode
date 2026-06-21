@@ -24,6 +24,8 @@ public class MessageBlock {
         this.segments = new ArrayList<>();
     }
 
+    public Role role() { return role; }
+
     public boolean isComplete() {
         return isComplete;
     }

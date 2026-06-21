@@ -84,4 +84,57 @@ class OpenAIIntegrationTest {
         assertThat(events).isNotEmpty();
         assertThat(events.get(0)).isInstanceOf(StreamEvent.ContentDelta.class);
     }
+
+    @Test
+    void shouldHandleRateLimit429() {
+        mockServer.enqueue(new MockResponse()
+            .setResponseCode(429)
+            .setBody("{\"error\":{\"message\":\"Rate limit exceeded\"}}")
+            .addHeader("Retry-After", "30"));
+
+        StreamEventIterator iterator = provider.streamChat(history, config);
+        List<StreamEvent> events = new ArrayList<>();
+        while (iterator.hasNext()) {
+            events.add(iterator.next());
+        }
+        iterator.close();
+
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0)).isInstanceOf(StreamEvent.StreamError.class);
+        StreamEvent.StreamError error = (StreamEvent.StreamError) events.get(0);
+        assertThat(error.statusCode()).isEqualTo(429);
+    }
+
+    @Test
+    void shouldHandleMalformedJsonInSse() {
+        String sseBody =
+            "data: {\"id\":\"1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"delta\":{\"content\":\"Good\"}}]}\n\n" +
+            "data: {invalid json}}\n\n" +
+            "data: [DONE]\n\n";
+        mockServer.enqueue(new MockResponse()
+            .setBody(sseBody)
+            .setHeader("Content-Type", "text/event-stream"));
+
+        StreamEventIterator iterator = provider.streamChat(history, config);
+        List<StreamEvent> events = new ArrayList<>();
+        while (iterator.hasNext()) {
+            events.add(iterator.next());
+        }
+        iterator.close();
+
+        assertThat(events).anyMatch(e -> e instanceof StreamEvent.ContentDelta);
+        assertThat(events).anyMatch(e -> e instanceof StreamEvent.StreamError);
+    }
+
+    @Test
+    void shouldHandleConnectionRefused() throws Exception {
+        mockServer.shutdown();
+
+        StreamEventIterator iterator = provider.streamChat(history, config);
+        assertThat(iterator.hasNext()).isTrue();
+        StreamEvent event = iterator.next();
+        assertThat(event).isInstanceOf(StreamEvent.StreamError.class);
+        assertThat(((StreamEvent.StreamError) event).message()).contains("Connection");
+        iterator.close();
+    }
 }

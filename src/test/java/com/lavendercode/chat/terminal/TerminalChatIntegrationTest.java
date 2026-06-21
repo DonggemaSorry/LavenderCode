@@ -103,25 +103,34 @@ class TerminalChatIntegrationTest {
         scheduler.shutdownNow();
     }
 
+    private RenderEvent pollUntil(Class<? extends RenderEvent> type) throws InterruptedException {
+        RenderEvent event;
+        while ((event = renderQueue.poll(2, TimeUnit.SECONDS)) != null) {
+            if (type.isInstance(event)) return event;
+        }
+        return null;
+    }
+
     @Test
     void shouldRenderUserMessage() throws Exception {
         inputQueue.put(new InputEvent.SendMessage("hello"));
         inputQueue.put(new InputEvent.Shutdown());
 
-        RenderEvent e1 = renderQueue.poll(2, TimeUnit.SECONDS);
-        assertThat(e1).isInstanceOf(RenderEvent.AddUserMessage.class);
+        RenderEvent e1 = pollUntil(RenderEvent.AddUserMessage.class);
+        assertThat(e1).isNotNull();
         assertThat(((RenderEvent.AddUserMessage) e1).text()).isEqualTo("hello");
     }
 
     @Test
     void clearCommandShouldEmitClearChat() throws Exception {
         inputQueue.put(new InputEvent.SendMessage("msg1"));
-        renderQueue.poll(2, TimeUnit.SECONDS); // drain AddUserMessage
+        pollUntil(RenderEvent.AddUserMessage.class);
 
         inputQueue.put(new InputEvent.ExecuteCommand(InputEvent.CommandType.CLEAR, ""));
         inputQueue.put(new InputEvent.Shutdown());
 
-        RenderEvent event = renderQueue.poll(2, TimeUnit.SECONDS);
+        RenderEvent event = pollUntil(RenderEvent.ClearChat.class);
+        assertThat(event).isNotNull();
         assertThat(event).isInstanceOf(RenderEvent.ClearChat.class);
     }
 
@@ -129,7 +138,8 @@ class TerminalChatIntegrationTest {
     void exitCommandShouldEmitShutdown() throws Exception {
         inputQueue.put(new InputEvent.ExecuteCommand(InputEvent.CommandType.EXIT, ""));
 
-        RenderEvent event = renderQueue.poll(2, TimeUnit.SECONDS);
+        RenderEvent event = pollUntil(RenderEvent.Shutdown.class);
+        assertThat(event).isNotNull();
         assertThat(event).isInstanceOf(RenderEvent.Shutdown.class);
     }
 }

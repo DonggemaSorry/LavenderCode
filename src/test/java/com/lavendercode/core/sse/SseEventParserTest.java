@@ -107,4 +107,52 @@ class SseEventParserTest {
 
         assertThat(events).isEmpty();
     }
+
+    @Test
+    void shouldHandleOpenAiDoneMarker() {
+        String sse = "data: [DONE]\n\n";
+        InputStream stream = new ByteArrayInputStream(sse.getBytes(StandardCharsets.UTF_8));
+
+        List<String> events = SseEventParser.parseStream(stream);
+
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0)).isEqualTo("[DONE]");
+    }
+
+    @Test
+    void shouldHandleDataWithOnlyWhitespace() {
+        // The parser strips the "data: " prefix but leaves the content as-is.
+        // Whitespace-only data results in an empty string event.
+        String sse = "data:    \n\n";
+        InputStream stream = new ByteArrayInputStream(sse.getBytes(StandardCharsets.UTF_8));
+
+        List<String> events = SseEventParser.parseStream(stream);
+
+        // Content after stripping prefix is empty string, which is a valid event
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0)).isEmpty();
+    }
+
+    @Test
+    void shouldFlushTrailingEventAtEof() {
+        String sse = "data: {\"text\":\"hello\"}\n";
+        InputStream stream = new ByteArrayInputStream(sse.getBytes(StandardCharsets.UTF_8));
+
+        List<String> events = SseEventParser.parseStream(stream);
+
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0)).isEqualTo("{\"text\":\"hello\"}");
+    }
+
+    @Test
+    void shouldHandleOnlyCommentLines() {
+        String sse =
+            ": comment 1\n" +
+            ": comment 2\n\n";
+        InputStream stream = new ByteArrayInputStream(sse.getBytes(StandardCharsets.UTF_8));
+
+        List<String> events = SseEventParser.parseStream(stream);
+
+        assertThat(events).isEmpty();
+    }
 }

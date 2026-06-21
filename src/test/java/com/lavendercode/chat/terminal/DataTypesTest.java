@@ -42,8 +42,8 @@ class DataTypesTest {
 
     // ==== StyleCatalog ====
     @Test
-    void styleCatalogShouldHave12Entries() {
-        assertThat(StyleCatalog.values()).hasSize(12);
+    void styleCatalogShouldHave14Entries() {
+        assertThat(StyleCatalog.values()).hasSize(14);
     }
 
     @Test

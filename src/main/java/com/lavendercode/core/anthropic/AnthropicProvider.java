@@ -5,7 +5,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lavendercode.core.config.LlmConfig;
 import com.lavendercode.core.provider.*;
-import com.lavendercode.core.sse.SseEventParser;
+import com.lavendercode.core.sse.SseEventReader;
+import com.lavendercode.core.sse.SseStreamEventIterator;
 import okhttp3.*;
 
 import java.io.IOException;
@@ -46,32 +47,23 @@ public class AnthropicProvider implements LlmProvider {
             .header("anthropic-version", "2023-06-01")
             .build();
 
+        Call call = httpClient.newCall(request);
         try {
-            Response response = httpClient.newCall(request).execute();
+            Response response = call.execute();
             if (!response.isSuccessful()) {
+                int code = response.code();
+                String message = response.message();
                 response.close();
                 return new SingleEventIterator(
                     new StreamEvent.StreamError(
-                        "HTTP " + response.code() + ": " + response.message(),
-                        response.code()
+                        "HTTP " + code + ": " + message,
+                        code
                     )
                 );
             }
 
-            List<String> sseEvents = SseEventParser.parseStream(
-                response.body().byteStream()
-            );
-            response.close();
-
-            List<StreamEvent> events = new ArrayList<>();
-            for (String sseData : sseEvents) {
-                StreamEvent event = parseSseEvent(sseData);
-                if (event != null) {
-                    events.add(event);
-                }
-            }
-
-            return new ListStreamEventIterator(events);
+            SseEventReader reader = new SseEventReader(response.body().byteStream());
+            return new SseStreamEventIterator(reader, response, call, this::parseSseEvent);
 
         } catch (IOException e) {
             return new SingleEventIterator(
@@ -130,32 +122,11 @@ public class AnthropicProvider implements LlmProvider {
                     yield null;
                 }
                 case "message_stop" -> new StreamEvent.StreamComplete();
-                default -> null; // Skip content_block_start, content_block_stop, ping, etc.
+                default -> null;
             };
         } catch (JsonProcessingException e) {
             return new StreamEvent.StreamError("Failed to parse SSE event: " + e.getMessage(), 0);
         }
-    }
-
-    private static class ListStreamEventIterator implements StreamEventIterator {
-        private final Iterator<StreamEvent> iterator;
-
-        ListStreamEventIterator(List<StreamEvent> events) {
-            this.iterator = events.iterator();
-        }
-
-        @Override
-        public boolean hasNext() {
-            return iterator.hasNext();
-        }
-
-        @Override
-        public StreamEvent next() {
-            return iterator.next();
-        }
-
-        @Override
-        public void close() {}
     }
 
     private static class SingleEventIterator implements StreamEventIterator {

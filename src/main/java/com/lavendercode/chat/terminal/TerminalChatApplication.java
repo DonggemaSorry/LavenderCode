@@ -47,8 +47,10 @@ public class TerminalChatApplication {
             chatService, deltaBuffer, renderQueue, inputQueue,
             sessionManager, provider, modelName, config, theme
         );
-        TerminalRenderer renderer = new TerminalRenderer(terminal, renderQueue, theme);
-        InputSystem inputSystem = new InputSystem(terminal, inputQueue);
+        InputAreaLayout inputLayout = new InputAreaLayout();
+        TerminalRenderer renderer = new TerminalRenderer(
+            terminal, renderQueue, theme, modelName, inputLayout);
+        InputSystem inputSystem = new InputSystem(terminal, inputQueue, renderQueue, inputLayout);
 
         // Threads
         Thread inputThread = new Thread(inputSystem::run, "lavender-input");

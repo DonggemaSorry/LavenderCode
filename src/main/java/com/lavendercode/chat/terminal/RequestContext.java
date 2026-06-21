@@ -6,8 +6,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class RequestContext {
     private final AtomicBoolean cancelled = new AtomicBoolean(false);
-    private final Call call;
-    private final StreamEventIterator iterator;
+    private volatile Call call;
+    private volatile StreamEventIterator iterator;
 
     public RequestContext(Call call, StreamEventIterator iterator) {
         this.call = call;
@@ -16,9 +16,27 @@ public class RequestContext {
 
     public boolean isCancelled() { return cancelled.get(); }
 
+    synchronized void bind(StreamEventIterator iterator, Call call) {
+        this.iterator = iterator;
+        this.call = call;
+        if (cancelled.get()) {
+            cancelResources();
+        }
+    }
+
     public void cancel() {
         cancelled.set(true);
-        if (call != null) call.cancel();
-        if (iterator != null) iterator.close();
+        cancelResources();
+    }
+
+    private void cancelResources() {
+        Call activeCall = call;
+        if (activeCall != null) {
+            activeCall.cancel();
+        }
+        StreamEventIterator activeIterator = iterator;
+        if (activeIterator != null) {
+            activeIterator.close();
+        }
     }
 }

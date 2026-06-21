@@ -173,4 +173,84 @@ class OpenAIProviderTest {
 
         iterator.close();
     }
+
+    @Test
+    void shouldYieldStreamErrorOn500() throws Exception {
+        mockServer.enqueue(new MockResponse().setResponseCode(500).setBody("Internal Server Error"));
+
+        mockServer.start();
+        String baseUrl = mockServer.url("/").toString();
+        baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+
+        LlmConfig config = new LlmConfig(
+            new ProviderConfig("openai", "gpt-4o", baseUrl, "key"),
+            new Options(2048, null, null)
+        );
+
+        List<Message> history = List.of(new Message(Role.USER, "Hi"));
+
+        StreamEventIterator iterator = provider.streamChat(history, config);
+
+        assertThat(iterator.hasNext()).isTrue();
+        StreamEvent e = iterator.next();
+        assertThat(e).isInstanceOf(StreamEvent.StreamError.class);
+        assertThat(((StreamEvent.StreamError) e).statusCode()).isEqualTo(500);
+
+        iterator.close();
+    }
+
+    @Test
+    void shouldYieldStreamCompleteForDoneMarker() throws Exception {
+        String sseBody = "data: [DONE]\n\n";
+        mockServer.enqueue(new MockResponse()
+            .setBody(sseBody)
+            .setHeader("Content-Type", "text/event-stream"));
+
+        mockServer.start();
+        String baseUrl = mockServer.url("/").toString();
+        baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+
+        LlmConfig config = new LlmConfig(
+            new ProviderConfig("openai", "gpt-4o", baseUrl, "key"),
+            new Options(2048, null, null)
+        );
+
+        List<Message> history = List.of(new Message(Role.USER, "Hi"));
+
+        StreamEventIterator iterator = provider.streamChat(history, config);
+
+        assertThat(iterator.hasNext()).isTrue();
+        StreamEvent e = iterator.next();
+        assertThat(e).isInstanceOf(StreamEvent.StreamComplete.class);
+
+        iterator.close();
+    }
+
+    @Test
+    void shouldHandleNoSystemPrompt() throws Exception {
+        String sseBody = "data: [DONE]\n\n";
+        mockServer.enqueue(new MockResponse()
+            .setBody(sseBody)
+            .setHeader("Content-Type", "text/event-stream"));
+
+        mockServer.start();
+        String baseUrl = mockServer.url("/").toString();
+        baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+
+        LlmConfig config = new LlmConfig(
+            new ProviderConfig("openai", "gpt-4o", baseUrl, "key"),
+            new Options(2048, "", null)
+        );
+
+        List<Message> history = List.of(new Message(Role.USER, "Hi"));
+
+        StreamEventIterator iterator = provider.streamChat(history, config);
+        while (iterator.hasNext()) { iterator.next(); }
+        iterator.close();
+
+        RecordedRequest request = mockServer.takeRequest(1, TimeUnit.SECONDS);
+        String body = request.getBody().readUtf8();
+        // Should NOT contain a system message when system_prompt is empty
+        assertThat(body).doesNotContain("\"role\":\"system\"");
+    }
 }

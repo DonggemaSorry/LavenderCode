@@ -23,22 +23,49 @@ public class TerminalRenderer {
     private int tokenCount = 0;
 
     private static final int STATUS_HEIGHT = 1;
+
+    private final InputAreaLayout inputLayout;
     private int viewportHeight;
+    private int separatorTopRow;
+    private int inputFirstRow;
+    private int inputLastRow;
+    private int separatorBotRow;
 
     public TerminalRenderer(Terminal terminal, BlockingQueue<RenderEvent> renderQueue,
-                            Theme theme) {
+                            Theme theme, String modelName, InputAreaLayout inputLayout) {
         this.terminal = terminal;
         this.renderQueue = renderQueue;
         this.blocks = new ArrayList<>();
         this.theme = theme;
-        this.viewportHeight = Math.max(1, terminal.getSize().getRows() - STATUS_HEIGHT - 1);
+        this.modelName = modelName != null ? modelName : "";
+        this.inputLayout = inputLayout;
+        recalcLayout();
     }
+
+    private void recalcLayout() {
+        recalcLayout(inputLayout.editRows());
+    }
+
+    private void recalcLayout(int editRows) {
+        int h = terminal.getSize().getRows();
+        inputLayout.update(h, editRows);
+        separatorTopRow = inputLayout.separatorTopRow();
+        inputFirstRow = inputLayout.inputFirstRow();
+        inputLastRow = inputLayout.inputLastRow();
+        separatorBotRow = inputLayout.separatorBotRow();
+        viewportHeight = Math.max(1, separatorTopRow - STATUS_HEIGHT);
+        clampViewport();
+    }
+
+    /** The renderer exposes the input row so InputSystem knows where to place the cursor. */
+    public int inputRow() { return inputFirstRow; }
 
     public void run() {
         registerResizeHandler();
         terminal.puts(InfoCmp.Capability.enter_ca_mode);
         terminal.puts(InfoCmp.Capability.cursor_invisible);
         terminal.flush();
+        drawFull();
 
         try {
             while (true) {
@@ -64,7 +91,10 @@ public class TerminalRenderer {
                     currentAIBlock = null;
                 }
             }
-            case RenderEvent.AddUserMessage(var text) -> addBlock(Role.USER, text);
+            case RenderEvent.AddUserMessage(var text) -> {
+                autoScroll = true;
+                addBlock(Role.USER, text);
+            }
             case RenderEvent.AddSystemMessage(var text) -> addBlock(Role.SYSTEM, text);
             case RenderEvent.ThinkDelta(var text) -> appendThinking(text);
             case RenderEvent.ClearChat() -> {
@@ -80,13 +110,15 @@ public class TerminalRenderer {
                 drawViewport();
             }
             case RenderEvent.ScrollDelta(int d) -> scrollDelta(d);
+            case RenderEvent.ScrollPageUp() -> scrollDelta(-viewportHeight);
+            case RenderEvent.ScrollPageDown() -> scrollDelta(viewportHeight);
             case RenderEvent.ScrollAutoReset() -> {
                 autoScroll = true;
                 scrollToBottom();
                 drawViewport();
             }
             case RenderEvent.WindowResize(int c, int r) -> {
-                viewportHeight = r - STATUS_HEIGHT - 1;
+                recalcLayout(inputLayout.editRows());
                 reflowAll();
                 drawFull();
             }
@@ -99,6 +131,14 @@ public class TerminalRenderer {
                 this.tokenCount = tc;
                 drawStatusBar();
             }
+            case RenderEvent.RefreshInputChrome(var done) -> {
+                drawInputDraft("", 0);
+                if (done != null) done.countDown();
+            }
+            case RenderEvent.UpdateInputDraft(var draft, int cursor, var done) -> {
+                drawInputDraft(draft, cursor);
+                if (done != null) done.countDown();
+            }
             case RenderEvent.RefreshAll() -> drawFull();
             case RenderEvent.Shutdown() -> { /* handled in run() */ }
         }
@@ -110,6 +150,79 @@ public class TerminalRenderer {
         terminal.puts(InfoCmp.Capability.clear_screen);
         drawStatusBar();
         drawViewport();
+        drawInputDraft("", 0);
+    }
+
+    private void drawInputChrome() {
+        drawSeparator(separatorTopRow);
+        drawInputArea();
+        drawSeparator(separatorBotRow);
+    }
+
+    private void drawInputDraft(String draft, int cursorIndex) {
+        int width = terminal.getWidth();
+        int terminalRows = terminal.getSize().getRows();
+        int desiredRows = InputDraftLayout.desiredEditRows(draft, width, terminalRows);
+        boolean layoutChanged = desiredRows != inputLayout.editRows();
+        if (layoutChanged) {
+            recalcLayout(desiredRows);
+            drawViewport();
+        }
+
+        drawInputChrome();
+        int editRows = inputLayout.editRows();
+        var lines = InputDraftLayout.format(draft, cursorIndex, width, editRows);
+
+        for (int i = 0; i < editRows; i++) {
+            int row = inputFirstRow + i;
+            terminal.puts(InfoCmp.Capability.cursor_address, row, 0);
+            terminal.puts(InfoCmp.Capability.clr_eol);
+            terminal.writer().print(theme.apply(StyleCatalog.INPUT_BG, " ".repeat(width)).toAnsi(terminal));
+            terminal.puts(InfoCmp.Capability.cursor_address, row, 0);
+
+            if (i < lines.size()) {
+                var line = lines.get(i);
+                if (!line.prefix().isEmpty()) {
+                    terminal.writer().print(theme.apply(StyleCatalog.PROMPT, line.prefix()).toAnsi(terminal));
+                }
+                String before = line.showCursor()
+                    ? line.text().substring(0, line.cursorCol())
+                    : line.text();
+                String after = line.showCursor()
+                    ? line.text().substring(line.cursorCol())
+                    : "";
+                if (!before.isEmpty()) {
+                    terminal.writer().print(theme.apply(StyleCatalog.INPUT_TEXT, before).toAnsi(terminal));
+                }
+                if (line.showCursor()) {
+                    terminal.writer().print(theme.apply(StyleCatalog.PROMPT, "\u2588").toAnsi(terminal));
+                }
+                if (!after.isEmpty()) {
+                    terminal.writer().print(theme.apply(StyleCatalog.INPUT_TEXT, after).toAnsi(terminal));
+                }
+            }
+        }
+        terminal.flush();
+    }
+
+    private void drawSeparator(int row) {
+        AttributedString sep = theme.apply(StyleCatalog.INPUT_BORDER,
+            "\u2500".repeat(terminal.getWidth()));
+        terminal.puts(InfoCmp.Capability.cursor_address, row, 0);
+        terminal.writer().print(sep.toAnsi(terminal));
+        terminal.flush();
+    }
+
+    /** Draw input box background — prompt and text are handled by JLine3 readLine(). */
+    private void drawInputArea() {
+        int width = terminal.getWidth();
+        AttributedString bg = theme.apply(StyleCatalog.INPUT_BG, " ".repeat(width));
+        String bgAnsi = bg.toAnsi(terminal);
+        for (int row = inputFirstRow; row <= inputLastRow; row++) {
+            terminal.puts(InfoCmp.Capability.cursor_address, row, 0);
+            terminal.writer().print(bgAnsi);
+        }
+        terminal.flush();
     }
 
     private void drawStatusBar() {
@@ -118,6 +231,7 @@ public class TerminalRenderer {
         AttributedString styled = theme.apply(StyleCatalog.STATUS_BAR,
             padRight(status, terminal.getWidth()));
         terminal.puts(InfoCmp.Capability.cursor_address, 0, 0);
+        terminal.puts(InfoCmp.Capability.clr_eol);
         terminal.writer().print(styled.toAnsi(terminal));
         terminal.flush();
     }
@@ -125,16 +239,24 @@ public class TerminalRenderer {
     private void drawViewport() {
         clampViewport();
         int totalLines = totalContentLines();
+        int viewportEnd = separatorTopRow; // stop before separator
 
-        for (int screenRow = STATUS_HEIGHT; screenRow < terminal.getHeight() - 1; screenRow++) {
+        for (int screenRow = STATUS_HEIGHT; screenRow < viewportEnd; screenRow++) {
             int contentIdx = viewportStart + (screenRow - STATUS_HEIGHT);
             terminal.puts(InfoCmp.Capability.cursor_address, screenRow, 0);
             terminal.puts(InfoCmp.Capability.clr_eol);
 
             if (contentIdx < totalLines) {
-                RenderedLine line = getRenderedLine(contentIdx);
-                if (line != null) {
-                    for (AttributedString seg : line.segments()) {
+                var lineInfo = getLineWithRole(contentIdx);
+                if (lineInfo != null) {
+                    // Draw role prefix on first line of each block
+                    if (lineInfo.isFirstLine) {
+                        drawRolePrefix(lineInfo.role);
+                    } else {
+                        drawContinuationPrefix(lineInfo.role);
+                    }
+                    // Draw message content
+                    for (AttributedString seg : lineInfo.line.segments()) {
                         terminal.writer().print(seg.toAnsi(terminal));
                     }
                 }
@@ -145,16 +267,21 @@ public class TerminalRenderer {
     }
 
     private void drawDiff(int startRow, int count) {
-        int endRow = Math.min(startRow + count, terminal.getHeight() - 1);
+        int endRow = Math.min(startRow + count, separatorTopRow);
         int totalLines = totalContentLines();
         for (int row = startRow; row < endRow; row++) {
             terminal.puts(InfoCmp.Capability.cursor_address, row, 0);
             terminal.puts(InfoCmp.Capability.clr_eol);
             int contentIdx = viewportStart + (row - STATUS_HEIGHT);
             if (contentIdx >= 0 && contentIdx < totalLines) {
-                RenderedLine line = getRenderedLine(contentIdx);
-                if (line != null) {
-                    for (AttributedString seg : line.segments()) {
+                var lineInfo = getLineWithRole(contentIdx);
+                if (lineInfo != null) {
+                    if (lineInfo.isFirstLine) {
+                        drawRolePrefix(lineInfo.role);
+                    } else {
+                        drawContinuationPrefix(lineInfo.role);
+                    }
+                    for (AttributedString seg : lineInfo.line.segments()) {
                         terminal.writer().print(seg.toAnsi(terminal));
                     }
                 }
@@ -162,6 +289,26 @@ public class TerminalRenderer {
             drawScrollbarCell(row, totalLines);
         }
         terminal.flush();
+    }
+
+    private void drawRolePrefix(Role role) {
+        switch (role) {
+            case USER ->
+                terminal.writer().print(theme.apply(StyleCatalog.USER_MESSAGE, "You: ").toAnsi(terminal));
+            case ASSISTANT ->
+                terminal.writer().print(theme.apply(StyleCatalog.ASSISTANT_BORDER, "\u2502 ").toAnsi(terminal));
+            case SYSTEM ->
+                terminal.writer().print(theme.apply(StyleCatalog.SYSTEM_MESSAGE, "  ").toAnsi(terminal));
+        }
+    }
+
+    private void drawContinuationPrefix(Role role) {
+        switch (role) {
+            case USER -> terminal.writer().print("     "); // 5 spaces = "You: "
+            case ASSISTANT ->
+                terminal.writer().print(theme.apply(StyleCatalog.ASSISTANT_BORDER, "\u2502 ").toAnsi(terminal));
+            case SYSTEM -> terminal.writer().print("  ");
+        }
     }
 
     private void drawScrollbarCell(int screenRow, int totalLines) {
@@ -185,8 +332,8 @@ public class TerminalRenderer {
             blocks.add(currentAIBlock);
         }
         int oldCount = currentAIBlock.lineCount();
-        int width = Math.max(1, terminal.getWidth() - 2);
-        currentAIBlock.append(text, width);
+        int aiWidth = Math.max(1, terminal.getWidth() - 3); // "│ " prefix(2) + scrollbar(1)
+        currentAIBlock.append(text, aiWidth);
         int added = currentAIBlock.lineCount() - oldCount;
         if (added > 0) {
             int firstRow = STATUS_HEIGHT + (blockToGlobalRow(currentAIBlock) + oldCount - viewportStart);
@@ -203,8 +350,8 @@ public class TerminalRenderer {
             currentAIBlock = new MessageBlock(Role.ASSISTANT);
             blocks.add(currentAIBlock);
         }
-        int width = Math.max(1, terminal.getWidth() - 4);
-        currentAIBlock.appendThinking(text, width);
+        int thinkWidth = Math.max(1, terminal.getWidth() - 5); // "│ " prefix(2) + indent(2) + scrollbar(1)
+        currentAIBlock.appendThinking(text, thinkWidth);
         if (autoScroll) {
             scrollToBottom();
             drawViewport();
@@ -213,8 +360,11 @@ public class TerminalRenderer {
 
     private void addBlock(Role role, String text) {
         MessageBlock block = new MessageBlock(role);
-        int width = Math.max(1, terminal.getWidth() - 2);
-        block.append(text, width);
+        int contentWidth = switch (role) {
+            case USER -> Math.max(1, terminal.getWidth() - 6); // "You: " prefix(5) + scrollbar(1)
+            default -> Math.max(1, terminal.getWidth() - 3);   // prefix(2) + scrollbar(1)
+        };
+        block.append(text, contentWidth);
         block.markComplete();
         blocks.add(block);
         if (autoScroll) scrollToBottom();
@@ -229,8 +379,8 @@ public class TerminalRenderer {
         clampViewport();
         if (viewportStart != oldStart) {
             drawViewport();
-            if (viewportStart == maxViewportStart()) autoScroll = true;
         }
+        autoScroll = viewportStart >= maxViewportStart();
     }
 
     private void scrollToBottom() { viewportStart = maxViewportStart(); }
@@ -251,19 +401,23 @@ public class TerminalRenderer {
         return row;
     }
 
-    private RenderedLine getRenderedLine(int globalIndex) {
+    private record LineWithRole(RenderedLine line, Role role, boolean isFirstLine) {}
+
+    private LineWithRole getLineWithRole(int globalIndex) {
         int remaining = globalIndex;
         for (MessageBlock block : blocks) {
             List<RenderedLine> lines = block.allLines();
-            if (remaining < lines.size()) return lines.get(remaining);
+            if (remaining < lines.size()) {
+                return new LineWithRole(lines.get(remaining), block.role(), remaining == 0);
+            }
             remaining -= lines.size();
         }
         return null;
     }
 
     private void reflowAll() {
-        int width = Math.max(1, terminal.getWidth() - 2);
-        blocks.forEach(b -> b.reflow(width));
+        int reflowWidth = Math.max(1, terminal.getWidth() - 3); // conservative: 2-char prefix + scrollbar
+        blocks.forEach(b -> b.reflow(reflowWidth));
         clampViewport();
     }
 

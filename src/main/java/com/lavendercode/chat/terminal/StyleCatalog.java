@@ -12,5 +12,7 @@ public enum StyleCatalog {
     SCROLLBAR_TRACK,
     SCROLLBAR_THUMB,
     PROMPT,
-    INPUT_TEXT
+    INPUT_TEXT,
+    INPUT_BG,
+    INPUT_BORDER
 }

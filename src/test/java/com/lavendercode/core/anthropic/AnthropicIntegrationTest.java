@@ -116,4 +116,44 @@ class AnthropicIntegrationTest {
         assertThat(event).isInstanceOf(StreamEvent.StreamError.class);
         iterator.close();
     }
+
+    @Test
+    void shouldHandleEmptyResponse() {
+        mockServer.enqueue(new MockResponse()
+            .setBody("")
+            .setHeader("Content-Type", "text/event-stream"));
+
+        StreamEventIterator iterator = provider.streamChat(history, config);
+        List<StreamEvent> events = new ArrayList<>();
+        while (iterator.hasNext()) {
+            events.add(iterator.next());
+        }
+        iterator.close();
+
+        // Empty stream should yield no events
+        assertThat(events).isEmpty();
+    }
+
+    @Test
+    void shouldHandleMalformedJsonInSse() {
+        String sseBody =
+            "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"Good\"}}\n\n" +
+            "data: {this is not valid json}\n\n" +
+            "data: {\"type\":\"message_stop\"}\n\n";
+        mockServer.enqueue(new MockResponse()
+            .setBody(sseBody)
+            .setHeader("Content-Type", "text/event-stream"));
+
+        StreamEventIterator iterator = provider.streamChat(history, config);
+        List<StreamEvent> events = new ArrayList<>();
+        while (iterator.hasNext()) {
+            events.add(iterator.next());
+        }
+        iterator.close();
+
+        // Should have at least one valid delta and an error
+        assertThat(events).isNotEmpty();
+        assertThat(events).anyMatch(e -> e instanceof StreamEvent.ContentDelta);
+        assertThat(events).anyMatch(e -> e instanceof StreamEvent.StreamError);
+    }
 }
