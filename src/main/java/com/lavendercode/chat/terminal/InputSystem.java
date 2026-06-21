@@ -46,7 +46,12 @@ public class InputSystem {
                     continue;
                 }
                 if (line.startsWith("/")) {
-                    inputQueue.offer(parseCommand(line.trim()));
+                    InputEvent event = parseCommand(line.trim());
+                    inputQueue.offer(event);
+                    if (shouldStopAfter(event)) {
+                        shutdown.set(true);
+                        break;
+                    }
                 } else {
                     inputQueue.offer(new InputEvent.SendMessage(line));
                 }
@@ -56,12 +61,19 @@ public class InputSystem {
                 inputQueue.offer(new InputEvent.Shutdown());
             }
         } finally {
-            keyReader.disableBracketedPaste();
-            publishDraftSync("", 0);
-            if (saved != null) {
-                terminal.setAttributes(saved);
+            if (!shutdown.get()) {
+                keyReader.disableBracketedPaste();
+                publishDraftSync("", 0);
+                if (saved != null) {
+                    terminal.setAttributes(saved);
+                }
             }
         }
+    }
+
+    static boolean shouldStopAfter(InputEvent event) {
+        return event instanceof InputEvent.ExecuteCommand cmd
+            && (cmd.type() == InputEvent.CommandType.EXIT || cmd.type() == InputEvent.CommandType.QUIT);
     }
 
     private String readEditedLine() throws IOException {
@@ -97,6 +109,7 @@ public class InputSystem {
                     if (code == 4) {
                         if (buffer.isEmpty()) {
                             publishDraftSync("", 0);
+                            shutdown.set(true);
                             inputQueue.offer(new InputEvent.Shutdown());
                             return null;
                         }
@@ -133,6 +146,9 @@ public class InputSystem {
     }
 
     private void publishDraftSync(String draft, int cursor) {
+        if (shutdown.get()) {
+            return;
+        }
         var latch = new CountDownLatch(1);
         try {
             renderQueue.put(new RenderEvent.UpdateInputDraft(draft, cursor, latch));

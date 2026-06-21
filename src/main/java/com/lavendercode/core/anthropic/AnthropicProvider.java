@@ -32,6 +32,12 @@ public class AnthropicProvider implements LlmProvider {
     }
 
     @Override
+    public void close() {
+        httpClient.dispatcher().executorService().shutdown();
+        httpClient.connectionPool().evictAll();
+    }
+
+    @Override
     public StreamEventIterator streamChat(List<Message> history, LlmConfig config) {
         String baseUrl = config.provider().baseUrl();
         if (baseUrl.endsWith("/")) {

@@ -89,4 +89,10 @@ class StreamingChatServiceTest {
         service.cancel(ctx);
         assertThat(ctx.isCancelled()).isTrue();
     }
+
+    @Test
+    void shutdownShouldStopIoPool() throws Exception {
+        StreamingChatService service = new StreamingChatService();
+        service.shutdown();
+    }
 }

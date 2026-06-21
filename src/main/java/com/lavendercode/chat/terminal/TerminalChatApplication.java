@@ -70,9 +70,28 @@ public class TerminalChatApplication {
         // Wait for render thread to finish (it exits on Shutdown event)
         renderThread.join();
 
-        // Cleanup
+        shutdownWorkers(inputSystem, inputQueue, inputThread, networkThread, timerScheduler, chatService, provider);
+    }
+
+    private static void shutdownWorkers(InputSystem inputSystem,
+                                        BlockingQueue<InputEvent> inputQueue,
+                                        Thread inputThread,
+                                        Thread networkThread,
+                                        ScheduledExecutorService timerScheduler,
+                                        ChatService chatService,
+                                        LlmProvider provider) throws InterruptedException {
+        inputSystem.requestShutdown();
+        inputQueue.offer(new InputEvent.Shutdown());
+
+        networkThread.join(2_000);
+        inputThread.join(2_000);
+
         timerScheduler.shutdownNow();
-        inputThread.interrupt();
-        networkThread.interrupt();
+        chatService.shutdown();
+        try {
+            provider.close();
+        } catch (Exception ignored) {
+            // Provider cleanup is best-effort during shutdown
+        }
     }
 }

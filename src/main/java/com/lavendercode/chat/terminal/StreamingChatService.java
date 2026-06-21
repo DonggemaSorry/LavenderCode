@@ -62,6 +62,16 @@ public class StreamingChatService implements ChatService {
         ctx.cancel();
     }
 
+    @Override
+    public void shutdown() {
+        ioPool.shutdownNow();
+        try {
+            ioPool.awaitTermination(2, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     private DeltaEvent toDeltaEvent(StreamEvent se) {
         return switch (se) {
             case StreamEvent.ContentDelta cd  -> new DeltaEvent.Content(cd.text());

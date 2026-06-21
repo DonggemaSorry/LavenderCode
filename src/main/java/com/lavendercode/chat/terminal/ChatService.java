@@ -12,4 +12,6 @@ public interface ChatService {
                           LlmConfig config,
                           Consumer<DeltaEvent> onDelta);
     void cancel(RequestContext ctx);
+
+    void shutdown();
 }

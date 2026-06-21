@@ -45,7 +45,9 @@ public class NetworkOrchestrator {
 
                 switch (event) {
                     case InputEvent.SendMessage msg -> handleSendMessage(msg);
-                    case InputEvent.ExecuteCommand cmd -> handleCommand(cmd);
+                    case InputEvent.ExecuteCommand cmd -> {
+                        if (handleCommand(cmd)) return;
+                    }
                     case InputEvent.Shutdown __ -> { handleShutdown(); return; }
                 }
             }
@@ -74,7 +76,7 @@ public class NetworkOrchestrator {
         }
     }
 
-    private void handleCommand(InputEvent.ExecuteCommand cmd) {
+    private boolean handleCommand(InputEvent.ExecuteCommand cmd) {
         switch (cmd.type()) {
             case CANCEL -> {
                 RequestContext ctx = currentRequest.getAndSet(null);
@@ -98,7 +100,7 @@ public class NetworkOrchestrator {
                     safePut(new RenderEvent.ThemeChange(newTheme));
                 }
             }
-            case EXIT, QUIT -> handleShutdown();
+            case EXIT, QUIT -> { handleShutdown(); return true; }
             case HELP -> {
                 deltaBuffer.forceFlush();
                 safePut(new RenderEvent.AddSystemMessage("""
@@ -124,6 +126,7 @@ public class NetworkOrchestrator {
                 if (se != null) safePut(se);
             }
         }
+        return false;
     }
 
     private void handleShutdown() {

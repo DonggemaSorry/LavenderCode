@@ -99,6 +99,7 @@ class TerminalChatIntegrationTest {
 
     @AfterEach
     void tearDown() {
+        chatService.shutdown();
         networkThread.interrupt();
         scheduler.shutdownNow();
     }
@@ -141,5 +142,8 @@ class TerminalChatIntegrationTest {
         RenderEvent event = pollUntil(RenderEvent.Shutdown.class);
         assertThat(event).isNotNull();
         assertThat(event).isInstanceOf(RenderEvent.Shutdown.class);
+
+        networkThread.join(2_000);
+        assertThat(networkThread.isAlive()).isFalse();
     }
 }
