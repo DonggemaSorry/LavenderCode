@@ -178,9 +178,6 @@ public class InputSystem {
         if (line.equals("/help")) {
             return new InputEvent.ExecuteCommand(InputEvent.CommandType.HELP, "");
         }
-        if (line.startsWith("/theme ")) {
-            return new InputEvent.ExecuteCommand(InputEvent.CommandType.THEME, input.substring(7).trim());
-        }
         if (line.startsWith("/scroll")) {
             return new InputEvent.ExecuteCommand(InputEvent.CommandType.SCROLL, input.substring(8).trim());
         }

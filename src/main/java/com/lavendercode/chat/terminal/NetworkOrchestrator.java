@@ -18,13 +18,12 @@ public class NetworkOrchestrator {
     private final LlmProvider provider;
     private final String modelName;
     private final LlmConfig config;
-    private Theme theme;
 
     public NetworkOrchestrator(ChatService chatService, DeltaBuffer deltaBuffer,
                                BlockingQueue<RenderEvent> renderQueue,
                                BlockingQueue<InputEvent> inputQueue,
                                SessionManager sessionManager, LlmProvider provider,
-                               String modelName, LlmConfig config, Theme theme) {
+                               String modelName, LlmConfig config) {
         this.chatService = chatService;
         this.deltaBuffer = deltaBuffer;
         this.renderQueue = renderQueue;
@@ -33,7 +32,6 @@ public class NetworkOrchestrator {
         this.provider = provider;
         this.modelName = modelName;
         this.config = config;
-        this.theme = theme;
     }
 
     public void run() {
@@ -92,14 +90,6 @@ public class NetworkOrchestrator {
                 sessionManager.clear();
                 safePut(new RenderEvent.ClearChat());
             }
-            case THEME -> {
-                deltaBuffer.forceFlush();
-                Theme newTheme = resolveTheme(cmd.args().trim().toLowerCase());
-                if (newTheme != null) {
-                    this.theme = newTheme;
-                    safePut(new RenderEvent.ThemeChange(newTheme));
-                }
-            }
             case EXIT, QUIT -> { handleShutdown(); return true; }
             case HELP -> {
                 deltaBuffer.forceFlush();
@@ -108,8 +98,6 @@ public class NetworkOrchestrator {
                       /exit       - Exit LavenderCode
                       /clear      - Clear conversation history
                       /help       - Show this help
-                      /theme dark - Switch to dark theme
-                      /theme light- Switch to light theme
                     Keyboard:
                       ↑/↓         - Scroll one line
                       PageUp/Down - Scroll one page
@@ -160,14 +148,6 @@ public class NetworkOrchestrator {
                 }
             }
         }
-    }
-
-    private Theme resolveTheme(String name) {
-        return switch (name) {
-            case "dark" -> Theme.dark();
-            case "light" -> Theme.light();
-            default -> null;
-        };
     }
 
     private RenderEvent parseScrollEvent(String args) {

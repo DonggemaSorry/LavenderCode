@@ -86,14 +86,6 @@ class RenderEventTest {
         assertThat(e.rows()).isEqualTo(24);
     }
 
-    // ---- ThemeChange ----
-    @Test
-    void themeChangeShouldStoreTheme() {
-        var theme = Theme.dark();
-        var e = new RenderEvent.ThemeChange(theme);
-        assertThat(e.theme()).isEqualTo(theme);
-    }
-
     // ---- StatusUpdate ----
     @Test
     void statusUpdateShouldStoreFields() {
@@ -184,12 +176,6 @@ class RenderEventTest {
     @Test
     void thinkDeltaShouldRejectNull() {
         assertThatThrownBy(() -> new RenderEvent.ThinkDelta(null))
-            .isInstanceOf(NullPointerException.class);
-    }
-
-    @Test
-    void themeChangeShouldRejectNull() {
-        assertThatThrownBy(() -> new RenderEvent.ThemeChange(null))
             .isInstanceOf(NullPointerException.class);
     }
 

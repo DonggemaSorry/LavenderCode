@@ -41,7 +41,7 @@ class NetworkOrchestratorTest {
 
         orchestrator = new NetworkOrchestrator(
             chatService, deltaBuffer, renderQueue, inputQueue,
-            sessionManager, provider, "gpt-4", config, Theme.dark()
+            sessionManager, provider, "gpt-4", config
         );
     }
 
@@ -81,17 +81,6 @@ class NetworkOrchestratorTest {
         RenderEvent event = pollUntil(RenderEvent.ClearChat.class);
         assertThat(event).isNotNull();
         assertThat(event).isInstanceOf(RenderEvent.ClearChat.class);
-    }
-
-    @Test
-    void themeCommandShouldPutThemeChange() throws Exception {
-        new Thread(orchestrator::run).start();
-
-        inputQueue.put(new InputEvent.ExecuteCommand(InputEvent.CommandType.THEME, "light"));
-
-        RenderEvent event = pollUntil(RenderEvent.ThemeChange.class);
-        assertThat(event).isNotNull();
-        assertThat(((RenderEvent.ThemeChange) event).theme().name()).isEqualTo("light");
     }
 
     @Test

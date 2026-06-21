@@ -70,15 +70,6 @@ class DataTypesTest {
     }
 
     @Test
-    void lightThemeShouldHaveAllStyleEntries() {
-        Theme light = Theme.light();
-        assertThat(light.name()).isEqualTo("light");
-        for (StyleCatalog key : StyleCatalog.values()) {
-            assertThat(light.styles()).as("missing key: " + key).containsKey(key);
-        }
-    }
-
-    @Test
     void themeApplyShouldReturnAttributedString() {
         Theme dark = Theme.dark();
         var result = dark.apply(StyleCatalog.PROMPT, "> ");

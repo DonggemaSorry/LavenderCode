@@ -37,23 +37,4 @@ public record Theme(String name, Map<StyleCatalog, AttributedStyle> styles) {
         map.put(StyleCatalog.INPUT_BORDER,      AttributedStyle.DEFAULT.foreground(136, 136, 136));
         return new Theme("dark", Collections.unmodifiableMap(map));
     }
-
-    public static Theme light() {
-        Map<StyleCatalog, AttributedStyle> map = new EnumMap<>(StyleCatalog.class);
-        map.put(StyleCatalog.USER_MESSAGE,    AttributedStyle.DEFAULT.foreground(0, 85, 170));
-        map.put(StyleCatalog.ASSISTANT_MESSAGE, AttributedStyle.DEFAULT.foreground(0, 0, 0));
-        map.put(StyleCatalog.ASSISTANT_BORDER,  AttributedStyle.DEFAULT.foreground(0, 0, 204));
-        map.put(StyleCatalog.SYSTEM_MESSAGE,    AttributedStyle.DEFAULT.foreground(170, 85, 0).italic());
-        map.put(StyleCatalog.CODE_BLOCK,        AttributedStyle.DEFAULT.foreground(0, 0, 0).background(221, 221, 221));
-        map.put(StyleCatalog.THINKING_TEXT,     AttributedStyle.DEFAULT.foreground(119, 119, 119).italic());
-        map.put(StyleCatalog.THINKING_LABEL,    AttributedStyle.DEFAULT.foreground(170, 0, 170));
-        map.put(StyleCatalog.STATUS_BAR,        AttributedStyle.DEFAULT.foreground(255, 255, 255).background(0, 85, 170));
-        map.put(StyleCatalog.SCROLLBAR_TRACK,   AttributedStyle.DEFAULT.foreground(204, 204, 204));
-        map.put(StyleCatalog.SCROLLBAR_THUMB,   AttributedStyle.DEFAULT.foreground(0, 0, 0).bold());
-        map.put(StyleCatalog.PROMPT,            AttributedStyle.DEFAULT.foreground(0, 170, 0).bold());
-        map.put(StyleCatalog.INPUT_TEXT,        AttributedStyle.DEFAULT.foreground(0, 0, 0));
-        map.put(StyleCatalog.INPUT_BG,          AttributedStyle.DEFAULT.foreground(0, 0, 0).background(235, 235, 235));
-        map.put(StyleCatalog.INPUT_BORDER,      AttributedStyle.DEFAULT.foreground(153, 153, 153));
-        return new Theme("light", Collections.unmodifiableMap(map));
-    }
 }

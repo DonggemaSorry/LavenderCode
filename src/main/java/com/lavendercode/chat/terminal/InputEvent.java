@@ -9,6 +9,6 @@ public sealed interface InputEvent {
     record Shutdown() implements InputEvent {}
 
     enum CommandType {
-        EXIT, QUIT, CLEAR, HELP, THEME, CANCEL, SCROLL
+        EXIT, QUIT, CLEAR, HELP, CANCEL, SCROLL
     }
 }

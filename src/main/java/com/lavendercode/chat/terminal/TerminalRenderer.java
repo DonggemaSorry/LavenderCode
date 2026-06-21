@@ -122,10 +122,6 @@ public class TerminalRenderer {
                 reflowAll();
                 drawFull();
             }
-            case RenderEvent.ThemeChange(var t) -> {
-                this.theme = t;
-                drawFull();
-            }
             case RenderEvent.StatusUpdate(var m, int tc, boolean __) -> {
                 this.modelName = m;
                 this.tokenCount = tc;

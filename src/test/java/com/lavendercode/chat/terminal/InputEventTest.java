@@ -19,8 +19,8 @@ class InputEventTest {
         assertThat(event.type()).isEqualTo(CommandType.HELP);
         assertThat(event.args()).isEmpty();
 
-        var event2 = new InputEvent.ExecuteCommand(CommandType.THEME, "dark");
-        assertThat(event2.args()).isEqualTo("dark");
+        var event2 = new InputEvent.ExecuteCommand(CommandType.CLEAR, "");
+        assertThat(event2.args()).isEmpty();
     }
 
     @Test

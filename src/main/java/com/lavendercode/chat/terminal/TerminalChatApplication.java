@@ -45,7 +45,7 @@ public class TerminalChatApplication {
         ChatService chatService = new StreamingChatService();
         NetworkOrchestrator orchestrator = new NetworkOrchestrator(
             chatService, deltaBuffer, renderQueue, inputQueue,
-            sessionManager, provider, modelName, config, theme
+            sessionManager, provider, modelName, config
         );
         InputAreaLayout inputLayout = new InputAreaLayout();
         TerminalRenderer renderer = new TerminalRenderer(

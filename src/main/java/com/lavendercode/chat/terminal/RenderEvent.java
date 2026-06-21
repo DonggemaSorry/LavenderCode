@@ -16,7 +16,6 @@ public sealed interface RenderEvent
             RenderEvent.ScrollAutoReset,
             RenderEvent.ClearChat,
             RenderEvent.WindowResize,
-            RenderEvent.ThemeChange,
             RenderEvent.StatusUpdate,
             RenderEvent.RefreshInputChrome,
             RenderEvent.UpdateInputDraft,
@@ -62,10 +61,6 @@ public sealed interface RenderEvent
             if (cols < 1) throw new IllegalArgumentException("cols must be >= 1");
             if (rows < 1) throw new IllegalArgumentException("rows must be >= 1");
         }
-    }
-
-    record ThemeChange(Theme theme) implements RenderEvent {
-        public ThemeChange { Objects.requireNonNull(theme); }
     }
 
     record StatusUpdate(String model, int tokenCount, boolean isEstimating) implements RenderEvent {
