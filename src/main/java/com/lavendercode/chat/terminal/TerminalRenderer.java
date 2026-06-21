@@ -65,6 +65,11 @@ public class TerminalRenderer {
         terminal.puts(InfoCmp.Capability.enter_ca_mode);
         terminal.puts(InfoCmp.Capability.cursor_invisible);
         terminal.flush();
+        try {
+            LavenderSplash.show(terminal);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
         drawFull();
 
         try {

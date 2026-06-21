@@ -37,9 +37,6 @@ public class LavenderCode {
             return;
         }
 
-        System.out.println("Loaded config for protocol: " + config.provider().protocol());
-        System.out.println("Model: " + config.provider().model());
-
         LlmProvider provider = ProviderRegistry.get(config.provider().protocol());
         SessionManager sessionManager = new InMemorySessionManager();
 
