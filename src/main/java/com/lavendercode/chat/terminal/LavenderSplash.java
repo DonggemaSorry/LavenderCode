@@ -7,7 +7,7 @@ import org.jline.utils.AttributedStyle;
 import org.jline.utils.InfoCmp;
 
 /**
- * Poetic startup splash: a composited lavender meadow and tagline on twilight background.
+ * Poetic startup splash: pixel lavender art and tagline on a twilight background.
  */
 public final class LavenderSplash {
 
@@ -18,37 +18,13 @@ public final class LavenderSplash {
     private static final int ART_WIDTH = 24;
     private static final int ART_HEIGHT = 41;
 
-    /** Horizontal advance between stems; smaller values overlap more (24 = full width, no overlap). */
-    private static final int FLOWER_STEP = 9;
-    /** Minimum stems across the meadow. */
-    private static final int MIN_MEADOW_FLOWERS = 3;
-    /** Back-row stems sit higher and appear softer for depth. */
-    private static final int BACK_ROW_LIFT = -8;
-    private static final float BACK_LAYER_BRIGHTNESS = 0.58f;
-    private static final int[] ROW_OFFSET_PATTERN = {4, 0, -3, 2, -4, 1, -2, 3, -1, 1};
-
-    private static final String TAGLINE_FIRST = "\u7b49\u4f60\uff0c";
-    private static final String TAGLINE_SECOND = "\u5728\u85b0\u8863\u8349\u76db\u5f00\u7684\u5730\u65b9";
+    private static final String TAGLINE = "\u7b49\u4f60\uff0c\u5728\u85b0\u8863\u8349\u76db\u5f00\u7684\u5730\u65b9";
     private static final String ORNAMENT = "\u2726";
 
     private static final int TYPEWRITER_MS = 90;
     private static final int HOLD_MS = 700;
-    /** Anchor meadow near the top so tagline stays on screen. */
-    private static final int TOP_MARGIN = 1;
-    private static final int BOTTOM_MARGIN = 2;
-    /** Blank rows between the meadow canvas and ornament / tagline. */
-    private static final int GAP_AFTER_MEADOW = 4;
-    private static final int GAP_AFTER_ORNAMENT = 1;
-    private static final int GAP_BETWEEN_TAGLINES = 1;
 
     private LavenderSplash() {}
-
-    record FlowerPlacement(int col, int rowOffset, float brightness) {}
-
-    record MeadowCanvas(int[][] pixels, int height) {}
-
-    record SplashLayout(int meadowStartRow, int ornamentRow, int firstTextRow, int secondTextRow,
-                        int visibleMeadowHeight) {}
 
     private static final int[][] LAVENDER_PIXELS = {
     {0,0,0,0,0,0,0,0,0,0,0,0x8652D1,0x8A4CD1,0,0,0,0,0,0,0,0,0,0,0},
@@ -100,149 +76,29 @@ public final class LavenderSplash {
         }
         int rows = terminal.getHeight();
         int cols = terminal.getWidth();
-        MeadowCanvas meadow = composeMeadow(cols);
-        if (rows < 8 || meadow == null) {
+        if (rows < 8 || cols < ART_WIDTH + 4) {
             return;
         }
 
         drawStarryBackground(terminal, rows, cols);
 
-        SplashLayout layout = computeLayout(rows, meadow);
-        MeadowCanvas visibleMeadow = clipToHeight(meadow, layout.visibleMeadowHeight());
+        int ornamentWidth = displayWidth(ORNAMENT);
+        int taglineWidth = displayWidth(TAGLINE);
+        int blockHeight = ART_HEIGHT + 2 + 1 + 1;
+        int startRow = Math.max(0, (rows - blockHeight - 1) / 2);
+        int artCol = Math.max(0, (cols - ART_WIDTH) / 2);
 
-        revealMeadow(terminal, layout.meadowStartRow(), visibleMeadow);
+        revealArt(terminal, startRow, artCol);
 
-        int ornamentCol = Math.max(0, (cols - displayWidth(ORNAMENT)) / 2);
-        clearRow(terminal, layout.ornamentRow(), cols);
-        writeLine(terminal, layout.ornamentRow(), ornamentCol,
+        int ornamentRow = startRow + ART_HEIGHT + 2;
+        int ornamentCol = Math.max(0, (cols - ornamentWidth) / 2);
+        writeLine(terminal, ornamentRow, ornamentCol,
             styled(ORNAMENT, 120, 90, 160, false));
 
-        clearRow(terminal, layout.firstTextRow(), cols);
-        typewriterTagline(terminal, layout.firstTextRow(), cols, TAGLINE_FIRST);
-
-        clearRow(terminal, layout.secondTextRow(), cols);
-        typewriterTagline(terminal, layout.secondTextRow(), cols, TAGLINE_SECOND);
+        int textRow = ornamentRow + 2;
+        typewriterTagline(terminal, textRow, cols, taglineWidth);
 
         Thread.sleep(HOLD_MS);
-    }
-
-    static SplashLayout computeLayout(int terminalRows, MeadowCanvas meadow) {
-        int footerHeight = GAP_AFTER_MEADOW + 1 + GAP_AFTER_ORNAMENT
-            + 1 + GAP_BETWEEN_TAGLINES + 1 + BOTTOM_MARGIN;
-        int maxMeadowHeight = Math.max(1, terminalRows - TOP_MARGIN - footerHeight);
-        int visibleMeadowHeight = Math.min(meadow.height(), maxMeadowHeight);
-
-        int meadowStartRow = TOP_MARGIN;
-        int ornamentRow = meadowStartRow + visibleMeadowHeight + GAP_AFTER_MEADOW;
-        int firstTextRow = ornamentRow + 1 + GAP_AFTER_ORNAMENT;
-        int secondTextRow = firstTextRow + 1 + GAP_BETWEEN_TAGLINES;
-        return new SplashLayout(meadowStartRow, ornamentRow, firstTextRow, secondTextRow, visibleMeadowHeight);
-    }
-
-    static MeadowCanvas clipToHeight(MeadowCanvas meadow, int maxRows) {
-        if (maxRows >= meadow.height()) {
-            return meadow;
-        }
-        int width = meadow.pixels()[0].length;
-        int[][] clipped = new int[maxRows][width];
-        System.arraycopy(meadow.pixels(), 0, clipped, 0, maxRows);
-        return new MeadowCanvas(clipped, maxRows);
-    }
-
-    static int meadowSpan(int flowerCount) {
-        if (flowerCount <= 0) {
-            return 0;
-        }
-        return (flowerCount - 1) * FLOWER_STEP + ART_WIDTH;
-    }
-
-    static int computeMeadowFlowerCount(int terminalCols) {
-        if (terminalCols < ART_WIDTH + 2) {
-            return 0;
-        }
-        int count = MIN_MEADOW_FLOWERS;
-        while (meadowSpan(count + 1) <= terminalCols - 2) {
-            count++;
-        }
-        return count;
-    }
-
-    static MeadowCanvas composeMeadow(int terminalCols) {
-        int frontCount = computeMeadowFlowerCount(terminalCols);
-        if (frontCount == 0) {
-            return null;
-        }
-
-        int span = meadowSpan(frontCount);
-        int startCol = Math.max(0, (terminalCols - span) / 2);
-        int halfStep = FLOWER_STEP / 2;
-
-        java.util.ArrayList<FlowerPlacement> placements = new java.util.ArrayList<>();
-
-        int backCount = frontCount + 1;
-        int backStart = startCol - halfStep;
-        for (int i = 0; i < backCount; i++) {
-            int col = backStart + i * FLOWER_STEP;
-            int rowOffset = BACK_ROW_LIFT + ROW_OFFSET_PATTERN[(i + 3) % ROW_OFFSET_PATTERN.length];
-            placements.add(new FlowerPlacement(col, rowOffset, BACK_LAYER_BRIGHTNESS));
-        }
-
-        for (int i = 0; i < frontCount; i++) {
-            int col = startCol + i * FLOWER_STEP;
-            int rowOffset = ROW_OFFSET_PATTERN[i % ROW_OFFSET_PATTERN.length];
-            placements.add(new FlowerPlacement(col, rowOffset, 1.0f));
-        }
-
-        int minOffset = Integer.MAX_VALUE;
-        int maxOffset = Integer.MIN_VALUE;
-        for (FlowerPlacement placement : placements) {
-            minOffset = Math.min(minOffset, placement.rowOffset());
-            maxOffset = Math.max(maxOffset, placement.rowOffset() + ART_HEIGHT);
-        }
-
-        int height = maxOffset - minOffset;
-        int[][] canvas = new int[height][terminalCols];
-
-        for (FlowerPlacement placement : placements) {
-            int topRow = placement.rowOffset() - minOffset;
-            paintFlower(canvas, height, terminalCols, placement.col(), topRow, placement.brightness());
-        }
-
-        return trimEmptyRows(canvas);
-    }
-
-    static MeadowCanvas trimEmptyRows(int[][] canvas) {
-        int height = canvas.length;
-        if (height == 0) {
-            return new MeadowCanvas(canvas, 0);
-        }
-        int width = canvas[0].length;
-        int first = 0;
-        int last = height - 1;
-        while (first < height && isEmptyRow(canvas[first])) {
-            first++;
-        }
-        while (last > first && isEmptyRow(canvas[last])) {
-            last--;
-        }
-        if (first > last) {
-            return new MeadowCanvas(canvas, height);
-        }
-        int trimmedHeight = last - first + 1;
-        int[][] trimmed = new int[trimmedHeight][width];
-        for (int row = 0; row < trimmedHeight; row++) {
-            trimmed[row] = canvas[first + row].clone();
-        }
-        return new MeadowCanvas(trimmed, trimmedHeight);
-    }
-
-    private static boolean isEmptyRow(int[] row) {
-        for (int rgb : row) {
-            if (rgb != 0) {
-                return false;
-            }
-        }
-        return true;
     }
 
     static int displayWidth(String text) {
@@ -276,45 +132,12 @@ public final class LavenderSplash {
         terminal.flush();
     }
 
-    private static void paintFlower(int[][] canvas, int height, int width,
-                                    int leftCol, int topRow, float brightness) {
+    private static void revealArt(Terminal terminal, int startRow, int artCol) throws InterruptedException {
+        AttributedStyle night = AttributedStyle.DEFAULT.background(BG_R, BG_G, BG_B);
         for (int row = 0; row < ART_HEIGHT; row++) {
-            int canvasRow = topRow + row;
-            if (canvasRow < 0 || canvasRow >= height) {
-                continue;
-            }
+            AttributedStringBuilder line = new AttributedStringBuilder(ART_WIDTH);
             for (int col = 0; col < ART_WIDTH; col++) {
                 int rgb = LAVENDER_PIXELS[row][col];
-                if (rgb == 0) {
-                    continue;
-                }
-                int canvasCol = leftCol + col;
-                if (canvasCol < 0 || canvasCol >= width) {
-                    continue;
-                }
-                canvas[canvasRow][canvasCol] = scaleRgb(rgb, brightness);
-            }
-        }
-    }
-
-    private static int scaleRgb(int rgb, float brightness) {
-        int r = Math.round(((rgb >> 16) & 0xFF) * brightness);
-        int g = Math.round(((rgb >> 8) & 0xFF) * brightness);
-        int b = Math.round((rgb & 0xFF) * brightness);
-        return (r << 16) | (g << 8) | b;
-    }
-
-    private static void revealMeadow(Terminal terminal, int startRow, MeadowCanvas meadow)
-            throws InterruptedException {
-        AttributedStyle night = AttributedStyle.DEFAULT.background(BG_R, BG_G, BG_B);
-        int[][] pixels = meadow.pixels();
-        int height = meadow.height();
-        int width = pixels[0].length;
-
-        for (int row = 0; row < height; row++) {
-            AttributedStringBuilder line = new AttributedStringBuilder(width);
-            for (int col = 0; col < width; col++) {
-                int rgb = pixels[row][col];
                 if (rgb == 0) {
                     line.append(" ", night);
                 } else {
@@ -324,22 +147,22 @@ public final class LavenderSplash {
                     line.append("\u2588", AttributedStyle.DEFAULT.foreground(r, g, b));
                 }
             }
-            terminal.puts(InfoCmp.Capability.cursor_address, startRow + row, 0);
+            terminal.puts(InfoCmp.Capability.cursor_address, startRow + row, artCol);
             terminal.writer().print(line.toAnsi());
             terminal.flush();
             Thread.sleep(18);
         }
     }
 
-    private static void typewriterTagline(Terminal terminal, int textRow, int cols, String text)
+    private static void typewriterTagline(Terminal terminal, int textRow, int cols, int taglineWidth)
             throws InterruptedException {
-        int textCol = Math.max(0, (cols - displayWidth(text)) / 2);
+        int textCol = Math.max(0, (cols - taglineWidth) / 2);
         StringBuilder typed = new StringBuilder();
         int charIndex = 0;
-        int totalChars = text.codePointCount(0, text.length());
+        int totalChars = TAGLINE.codePointCount(0, TAGLINE.length());
 
-        for (int i = 0; i < text.length(); ) {
-            int cp = text.codePointAt(i);
+        for (int i = 0; i < TAGLINE.length(); ) {
+            int cp = TAGLINE.codePointAt(i);
             typed.appendCodePoint(cp);
             i += Character.charCount(cp);
             charIndex++;
@@ -363,17 +186,6 @@ public final class LavenderSplash {
             style = style.italic();
         }
         return new AttributedString(text, style);
-    }
-
-    private static void clearRow(Terminal terminal, int row, int cols) {
-        AttributedStyle night = AttributedStyle.DEFAULT.background(BG_R, BG_G, BG_B);
-        AttributedStringBuilder line = new AttributedStringBuilder(cols);
-        for (int col = 0; col < cols; col++) {
-            line.append(" ", night);
-        }
-        terminal.puts(InfoCmp.Capability.cursor_address, row, 0);
-        terminal.writer().print(line.toAnsi());
-        terminal.flush();
     }
 
     private static void writeLine(Terminal terminal, int row, int col, AttributedString text) {
