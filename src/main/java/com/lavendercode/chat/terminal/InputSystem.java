@@ -105,6 +105,12 @@ public class InputSystem {
                         publishDraftSync(buffer.toString(), cursor);
                     }
                 }
+                case TerminalInput.Exit() -> {
+                    publishDraftSync("", 0);
+                    shutdown.set(true);
+                    inputQueue.offer(new InputEvent.Shutdown());
+                    return null;
+                }
                 case TerminalInput.Character(var code) -> {
                     if (code == 4) {
                         if (buffer.isEmpty()) {
@@ -115,10 +121,11 @@ public class InputSystem {
                         }
                         continue;
                     }
-                    if (code == 3) {
+                    if (code == 3) {  // Ctrl+C — exit
                         publishDraftSync("", 0);
-                        inputQueue.offer(new InputEvent.ExecuteCommand(InputEvent.CommandType.CANCEL, ""));
-                        return "";
+                        shutdown.set(true);
+                        inputQueue.offer(new InputEvent.Shutdown());
+                        return null;
                     }
                     if (code == 127 || code == 8) {
                         if (cursor > 0) {

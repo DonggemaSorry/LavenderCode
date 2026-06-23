@@ -10,6 +10,8 @@ final class TerminalKeyReader {
     private static final long ESC_TIMEOUT_MS = 50;
     private static final String BRACKETED_PASTE_ON = "\033[?2004h";
     private static final String BRACKETED_PASTE_OFF = "\033[?2004l";
+    /** Sentinel returned by {@link #readEscapeSequence()} for Alt+Enter. */
+    private static final int ALT_ENTER_NEWLINE = -3000;
 
     private final Terminal terminal;
 
@@ -41,6 +43,9 @@ final class TerminalKeyReader {
         }
 
         int esc = readEscapeSequence();
+        if (esc == ALT_ENTER_NEWLINE) {
+            return new TerminalInput.Newline();
+        }
         String scroll = scrollCommandFor(esc);
         if (scroll != null) {
             return new TerminalInput.Scroll(scroll);
@@ -107,6 +112,11 @@ final class TerminalKeyReader {
         int next = timedRead();
         if (next < 0) {
             return 27;
+        }
+        if (next == '\n' || next == '\r') {
+            // Alt+Enter — newline without submit
+            if (next == '\r') consumeLfIfPresent();
+            return ALT_ENTER_NEWLINE;
         }
         return switch (next) {
             case '[' -> readCsiSequence();

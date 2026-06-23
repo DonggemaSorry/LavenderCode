@@ -13,4 +13,6 @@ sealed interface TerminalInput {
     record Submit() implements TerminalInput {}
 
     record Newline() implements TerminalInput {}
+
+    record Exit() implements TerminalInput {}
 }
