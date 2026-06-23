@@ -25,7 +25,7 @@ public record Theme(String name, Map<StyleCatalog, AttributedStyle> styles) {
         map.put(StyleCatalog.ASSISTANT_MESSAGE, AttributedStyle.DEFAULT.foreground(255, 255, 255));
         map.put(StyleCatalog.ASSISTANT_BORDER,  AttributedStyle.DEFAULT.foreground(68, 68, 255));
         map.put(StyleCatalog.SYSTEM_MESSAGE,    AttributedStyle.DEFAULT.foreground(255, 255, 0).italic());
-        map.put(StyleCatalog.CODE_BLOCK,        AttributedStyle.DEFAULT.foreground(255, 255, 255).background(68, 68, 68));
+        map.put(StyleCatalog.CODE_BLOCK,        AttributedStyle.DEFAULT.foreground(210, 210, 210).background(40, 44, 52));
         map.put(StyleCatalog.THINKING_TEXT,     AttributedStyle.DEFAULT.foreground(136, 136, 136).italic());
         map.put(StyleCatalog.THINKING_LABEL,    AttributedStyle.DEFAULT.foreground(255, 0, 255));
         map.put(StyleCatalog.STATUS_BAR,        AttributedStyle.DEFAULT.foreground(0, 0, 0).background(0, 255, 255));

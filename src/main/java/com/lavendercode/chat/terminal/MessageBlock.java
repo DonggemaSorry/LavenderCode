@@ -206,7 +206,7 @@ public class MessageBlock {
     private void addWrappedLine(List<RenderedLine> out, String text, boolean italic) {
         if (inCodeBlock) {
             out.add(new RenderedLine(new AttributedString(text,
-                    AttributedStyle.DEFAULT.background(68, 68, 68))));
+                    AttributedStyle.DEFAULT.foreground(210, 210, 210).background(40, 44, 52))));
         } else if (italic) {
             out.add(new RenderedLine(new AttributedString(text,
                     AttributedStyle.DEFAULT.italic())));

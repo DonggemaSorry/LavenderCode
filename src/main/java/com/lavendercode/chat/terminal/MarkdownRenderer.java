@@ -128,8 +128,10 @@ public final class MarkdownRenderer {
     private static final AttributedStyle HEADING_STYLE = BASE_STYLE.bold().foreground(205, 0, 205);
     private static final AttributedStyle BOLD_STYLE = BASE_STYLE.bold();
     private static final AttributedStyle ITALIC_STYLE = BASE_STYLE.italic().foreground(0, 205, 205);
-    private static final AttributedStyle CODE_STYLE = BASE_STYLE.background(236, 236, 236);
-    private static final AttributedStyle LANG_STYLE = BASE_STYLE.foreground(136, 136, 136);
+    private static final AttributedStyle CODE_STYLE =
+        BASE_STYLE.foreground(210, 210, 210).background(40, 44, 52);
+    private static final AttributedStyle LANG_STYLE =
+        BASE_STYLE.foreground(136, 136, 136).background(40, 44, 52);
     private static final AttributedStyle STRIKE_STYLE = BASE_STYLE.crossedOut();
     private static final String BULLET = "\u2022";  // bullet character
 
