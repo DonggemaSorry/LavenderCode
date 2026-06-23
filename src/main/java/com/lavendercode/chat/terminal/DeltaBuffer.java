@@ -16,7 +16,7 @@ public class DeltaBuffer {
     public record BufferedEvent(Type type, String text, int statusCode) {
 
         public enum Type {
-            CONTENT_DELTA, THINK_DELTA,
+            CONTENT_DELTA,
             STREAM_COMPLETE, STREAM_ERROR,
             USER_MESSAGE, SYSTEM_MESSAGE
         }
@@ -67,6 +67,14 @@ public class DeltaBuffer {
         }
     }
 
+    /** Discard all pending buffered events without converting to render events. */
+    public void clear() {
+        cancelTimer();
+        synchronized (lock) {
+            events.clear();
+        }
+    }
+
     private void scheduleIfNeeded() {
         if (scheduledFlush == null || scheduledFlush.isDone()) {
             scheduledFlush = timerScheduler.schedule(this::doFlush, 50, TimeUnit.MILLISECONDS);
@@ -109,36 +117,30 @@ public class DeltaBuffer {
     private List<RenderEvent> buildBatch(List<BufferedEvent> snapshot) {
         List<RenderEvent> result = new ArrayList<>();
         StringBuilder textBuf = new StringBuilder();
-        StringBuilder thinkBuf = new StringBuilder();
         BufferedEvent.Type lastType = null;
 
         for (BufferedEvent e : snapshot) {
             if (e.type != lastType && lastType != null) {
-                flushBuffer(result, lastType, textBuf, thinkBuf);
+                flushBuffer(result, lastType, textBuf);
             }
             switch (e.type) {
                 case CONTENT_DELTA -> textBuf.append(e.text);
-                case THINK_DELTA   -> thinkBuf.append(e.text);
                 case STREAM_COMPLETE, STREAM_ERROR, USER_MESSAGE, SYSTEM_MESSAGE -> {
-                    flushBuffer(result, lastType, textBuf, thinkBuf);
+                    flushBuffer(result, lastType, textBuf);
                     result.add(e.toRenderEvent());
                 }
             }
             lastType = e.type;
         }
-        flushBuffer(result, lastType, textBuf, thinkBuf);
+        flushBuffer(result, lastType, textBuf);
         return result;
     }
 
     private void flushBuffer(List<RenderEvent> result, BufferedEvent.Type type,
-                             StringBuilder textBuf, StringBuilder thinkBuf) {
+                             StringBuilder textBuf) {
         if (type == BufferedEvent.Type.CONTENT_DELTA && textBuf.length() > 0) {
             result.add(new RenderEvent.AppendToMessage(textBuf.toString()));
             textBuf.setLength(0);
-        }
-        if (type == BufferedEvent.Type.THINK_DELTA && thinkBuf.length() > 0) {
-            result.add(new RenderEvent.ThinkDelta(thinkBuf.toString()));
-            thinkBuf.setLength(0);
         }
     }
 }

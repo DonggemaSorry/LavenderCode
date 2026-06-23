@@ -64,23 +64,6 @@ class DeltaBufferTest {
     }
 
     @Test
-    void contentThinkContentShouldRetainArrivalOrder() throws Exception {
-        buffer.append(new DeltaBuffer.BufferedEvent(DeltaBuffer.BufferedEvent.Type.CONTENT_DELTA, "A", 0));
-        buffer.append(new DeltaBuffer.BufferedEvent(DeltaBuffer.BufferedEvent.Type.THINK_DELTA, "think", 0));
-        buffer.append(new DeltaBuffer.BufferedEvent(DeltaBuffer.BufferedEvent.Type.CONTENT_DELTA, "B", 0));
-        buffer.forceFlush();
-        RenderEvent e1 = renderQueue.poll(100, TimeUnit.MILLISECONDS);
-        RenderEvent e2 = renderQueue.poll(100, TimeUnit.MILLISECONDS);
-        RenderEvent e3 = renderQueue.poll(100, TimeUnit.MILLISECONDS);
-        assertThat(e1).isInstanceOf(RenderEvent.AppendToMessage.class);
-        assertThat(((RenderEvent.AppendToMessage) e1).text()).isEqualTo("A");
-        assertThat(e2).isInstanceOf(RenderEvent.ThinkDelta.class);
-        assertThat(((RenderEvent.ThinkDelta) e2).text()).isEqualTo("think");
-        assertThat(e3).isInstanceOf(RenderEvent.AppendToMessage.class);
-        assertThat(((RenderEvent.AppendToMessage) e3).text()).isEqualTo("B");
-    }
-
-    @Test
     void forceFlushShouldHandleConcurrentAppends() throws Exception {
         for (int i = 0; i < 100; i++) {
             buffer.append(new DeltaBuffer.BufferedEvent(DeltaBuffer.BufferedEvent.Type.CONTENT_DELTA, String.valueOf(i), 0));
