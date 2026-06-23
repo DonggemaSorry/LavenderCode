@@ -93,6 +93,13 @@
             <version>3.26.3</version>
             <scope>test</scope>
         </dependency>
+
+        <!-- flexmark-java for markdown rendering -->
+        <dependency>
+            <groupId>com.vladsch.flexmark</groupId>
+            <artifactId>flexmark-all</artifactId>
+            <version>0.64.8</version>
+        </dependency>
     </dependencies>
 
     <build>
