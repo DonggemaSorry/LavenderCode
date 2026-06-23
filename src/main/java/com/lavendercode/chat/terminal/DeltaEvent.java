@@ -4,17 +4,12 @@ import java.util.Objects;
 
 public sealed interface DeltaEvent
     permits DeltaEvent.Content,
-            DeltaEvent.Thinking,
             DeltaEvent.Complete,
             DeltaEvent.Error,
             DeltaEvent.Usage {
 
     record Content(String text) implements DeltaEvent {
         public Content { Objects.requireNonNull(text); }
-    }
-
-    record Thinking(String text) implements DeltaEvent {
-        public Thinking { Objects.requireNonNull(text); }
     }
 
     record Complete() implements DeltaEvent {}

@@ -8,7 +8,6 @@ public sealed interface RenderEvent
             RenderEvent.FinalizeMessage,
             RenderEvent.AddUserMessage,
             RenderEvent.AddSystemMessage,
-            RenderEvent.ThinkDelta,
             RenderEvent.ScrollTo,
             RenderEvent.ScrollDelta,
             RenderEvent.ScrollPageUp,
@@ -36,10 +35,6 @@ public sealed interface RenderEvent
         public AddSystemMessage { Objects.requireNonNull(text); }
     }
 
-    record ThinkDelta(String text) implements RenderEvent {
-        public ThinkDelta { Objects.requireNonNull(text); }
-    }
-
     record ScrollTo(int lineIndex) implements RenderEvent {
         public ScrollTo {
             if (lineIndex < 0) throw new IllegalArgumentException("lineIndex must be >= 0");
@@ -63,8 +58,16 @@ public sealed interface RenderEvent
         }
     }
 
-    record StatusUpdate(String model, int tokenCount, boolean isEstimating) implements RenderEvent {
-        public StatusUpdate { Objects.requireNonNull(model); }
+    record StatusUpdate(
+        String providerName,
+        String modelName,
+        String statusText,
+        int tokenCount
+    ) implements RenderEvent {
+        public StatusUpdate {
+            Objects.requireNonNull(providerName, "providerName must not be null");
+            Objects.requireNonNull(modelName, "modelName must not be null");
+        }
     }
 
     record RefreshInputChrome(CountDownLatch done) implements RenderEvent {
