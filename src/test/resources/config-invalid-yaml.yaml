@@ -1,5 +1,5 @@
-provider:
-  protocol: openai
-  model: gpt-4o
-    base_url: https://api.openai.com  # bad indent
-  api_key: sk-test-key
+providers:
+  - protocol: openai
+    model: gpt-4o
+      base_url: https://api.openai.com
+    api_key: sk-test-key

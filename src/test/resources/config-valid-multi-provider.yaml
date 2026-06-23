@@ -1,0 +1,15 @@
+providers:
+  - name: DeepSeek
+    protocol: openai
+    model: deepseek-chat
+    base_url: https://api.deepseek.com
+    api_key: sk-test-key1
+  - name: Claude
+    protocol: anthropic
+    model: claude-sonnet-4-20250514
+    base_url: https://api.anthropic.com
+    api_key: sk-ant-test2
+
+options:
+  max_tokens: 4096
+  system_prompt: "You are a helpful AI assistant."

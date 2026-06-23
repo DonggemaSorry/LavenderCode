@@ -36,15 +36,26 @@ public class ConfigLoader {
             );
         }
 
-        Set<ConstraintViolation<LlmConfig>> violations = validator.validate(config);
-        if (!violations.isEmpty()) {
-            String fields = violations.stream()
-                .map(v -> v.getPropertyPath().toString())
-                .collect(Collectors.joining(", "));
+        if (config.providers().isEmpty()) {
             throw new ConfigException(
-                "Missing required config fields: " + fields,
-                fields
+                "Config error: providers list is empty",
+                "providers"
             );
+        }
+
+        for (int i = 0; i < config.providers().size(); i++) {
+            ProviderConfig pc = config.providers().get(i);
+            int index = i;
+            Set<ConstraintViolation<ProviderConfig>> violations = validator.validate(pc);
+            if (!violations.isEmpty()) {
+                String fields = violations.stream()
+                    .map(v -> "providers[" + index + "]." + v.getPropertyPath().toString())
+                    .collect(Collectors.joining(", "));
+                throw new ConfigException(
+                    "Config error: missing required fields: " + fields,
+                    fields
+                );
+            }
         }
 
         return config;

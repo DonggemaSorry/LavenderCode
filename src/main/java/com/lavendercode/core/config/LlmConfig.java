@@ -4,11 +4,14 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 
+import java.util.Collections;
+import java.util.List;
+
 public record LlmConfig(
-    @JsonProperty("provider")
+    @JsonProperty("providers")
     @NotNull
     @Valid
-    ProviderConfig provider,
+    List<ProviderConfig> providers,
 
     @JsonProperty("options")
     Options options
@@ -17,5 +20,10 @@ public record LlmConfig(
         if (options == null) {
             options = new Options();
         }
+    }
+
+    /** Returns an unmodifiable view of the providers list. */
+    public List<ProviderConfig> providers() {
+        return Collections.unmodifiableList(providers);
     }
 }

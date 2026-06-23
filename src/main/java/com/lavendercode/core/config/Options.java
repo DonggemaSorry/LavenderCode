@@ -7,21 +7,15 @@ public record Options(
     int maxTokens,
 
     @JsonProperty("system_prompt")
-    String systemPrompt,
-
-    @JsonProperty("thinking")
-    ThinkingConfig thinking
+    String systemPrompt
 ) {
     public Options() {
-        this(4096, "", new ThinkingConfig());
+        this(4096, "");
     }
 
     public Options {
         if (systemPrompt == null) {
             systemPrompt = "";
-        }
-        if (thinking == null) {
-            thinking = new ThinkingConfig();
         }
     }
 }
