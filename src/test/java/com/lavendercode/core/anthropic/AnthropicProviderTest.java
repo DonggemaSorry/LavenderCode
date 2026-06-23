@@ -51,8 +51,8 @@ class AnthropicProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            new ProviderConfig("anthropic", "claude-sonnet-4-20250514", baseUrl, "sk-ant-test"),
-            new Options(4096, "You are helpful.", new ThinkingConfig(true, 4000))
+            List.of(new ProviderConfig("anthropic", "anthropic", "claude-sonnet-4-20250514", baseUrl, "sk-ant-test", new ThinkingConfig(true, 4000))),
+            new Options(4096, "You are helpful.")
         );
 
         List<Message> history = List.of(
@@ -99,8 +99,8 @@ class AnthropicProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            new ProviderConfig("anthropic", "claude-sonnet-4", baseUrl, "key"),
-            new Options(1024, null, new ThinkingConfig(false, 0))
+            List.of(new ProviderConfig("anthropic", "anthropic", "claude-sonnet-4", baseUrl, "key", new ThinkingConfig(false, 0))),
+            new Options(1024, null)
         );
 
         List<Message> history = List.of(new Message(Role.USER, "Hi"));
@@ -141,8 +141,8 @@ class AnthropicProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            new ProviderConfig("anthropic", "claude-sonnet-4", baseUrl, "key"),
-            new Options(1024, null, new ThinkingConfig(true, 1024))
+            List.of(new ProviderConfig("anthropic", "anthropic", "claude-sonnet-4", baseUrl, "key", new ThinkingConfig(true, 1024))),
+            new Options(1024, null)
         );
 
         List<Message> history = List.of(new Message(Role.USER, "Complex question"));
@@ -166,8 +166,8 @@ class AnthropicProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            new ProviderConfig("anthropic", "claude-sonnet-4", baseUrl, "bad-key"),
-            new Options(1024, null, new ThinkingConfig(false, 0))
+            List.of(new ProviderConfig("anthropic", "anthropic", "claude-sonnet-4", baseUrl, "bad-key", new ThinkingConfig(false, 0))),
+            new Options(1024, null)
         );
 
         List<Message> history = List.of(new Message(Role.USER, "Hi"));
@@ -192,8 +192,8 @@ class AnthropicProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            new ProviderConfig("anthropic", "claude-sonnet-4", baseUrl, "key"),
-            new Options(1024, null, new ThinkingConfig(false, 0))
+            List.of(new ProviderConfig("anthropic", "anthropic", "claude-sonnet-4", baseUrl, "key", new ThinkingConfig(false, 0))),
+            new Options(1024, null)
         );
 
         List<Message> history = List.of(new Message(Role.USER, "Hi"));
@@ -220,8 +220,8 @@ class AnthropicProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            new ProviderConfig("anthropic", "claude-sonnet-4", baseUrl, "key"),
-            new Options(1024, null, new ThinkingConfig(false, 0))
+            List.of(new ProviderConfig("anthropic", "anthropic", "claude-sonnet-4", baseUrl, "key", new ThinkingConfig(false, 0))),
+            new Options(1024, null)
         );
 
         List<Message> history = List.of();
@@ -246,8 +246,8 @@ class AnthropicProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            new ProviderConfig("anthropic", "claude-sonnet-4", baseUrl, "key"),
-            new Options(1024, "", new ThinkingConfig(false, 0))
+            List.of(new ProviderConfig("anthropic", "anthropic", "claude-sonnet-4", baseUrl, "key", new ThinkingConfig(false, 0))),
+            new Options(1024, "")
         );
 
         List<Message> history = List.of(new Message(Role.USER, "Hi"));

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lavendercode.core.config.LlmConfig;
+import com.lavendercode.core.config.ProviderConfig;
 import com.lavendercode.core.provider.*;
 import com.lavendercode.core.sse.SseEventReader;
 import com.lavendercode.core.sse.SseStreamEventIterator;
@@ -39,7 +40,11 @@ public class OpenAIProvider implements LlmProvider {
 
     @Override
     public StreamEventIterator streamChat(List<Message> history, LlmConfig config) {
-        String baseUrl = config.provider().baseUrl();
+        ProviderConfig pc = config.providers().get(0);
+        String baseUrl = pc.baseUrl();
+        if (baseUrl == null) {
+            baseUrl = "https://api.openai.com";
+        }
         if (baseUrl.endsWith("/")) {
             baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
         }
@@ -49,7 +54,7 @@ public class OpenAIProvider implements LlmProvider {
         Request request = new Request.Builder()
             .url(endpoint)
             .post(RequestBody.create(requestBody, MediaType.parse("application/json")))
-            .header("Authorization", "Bearer " + config.provider().apiKey())
+            .header("Authorization", "Bearer " + pc.apiKey())
             .build();
 
         Call call = httpClient.newCall(request);
@@ -78,8 +83,9 @@ public class OpenAIProvider implements LlmProvider {
     }
 
     String buildRequestBody(List<Message> history, LlmConfig config) {
+        ProviderConfig pc = config.providers().get(0);
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("model", config.provider().model());
+        body.put("model", pc.model());
         body.put("stream", true);
 
         List<Map<String, Object>> messages = new ArrayList<>();

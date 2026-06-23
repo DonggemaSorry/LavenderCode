@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lavendercode.core.config.LlmConfig;
+import com.lavendercode.core.config.ProviderConfig;
 import com.lavendercode.core.provider.*;
 import com.lavendercode.core.sse.SseEventReader;
 import com.lavendercode.core.sse.SseStreamEventIterator;
@@ -39,7 +40,11 @@ public class AnthropicProvider implements LlmProvider {
 
     @Override
     public StreamEventIterator streamChat(List<Message> history, LlmConfig config) {
-        String baseUrl = config.provider().baseUrl();
+        ProviderConfig pc = config.providers().get(0);
+        String baseUrl = pc.baseUrl();
+        if (baseUrl == null) {
+            baseUrl = "https://api.anthropic.com";
+        }
         if (baseUrl.endsWith("/")) {
             baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
         }
@@ -49,7 +54,7 @@ public class AnthropicProvider implements LlmProvider {
         Request request = new Request.Builder()
             .url(endpoint)
             .post(RequestBody.create(requestBody, MediaType.parse("application/json")))
-            .header("x-api-key", config.provider().apiKey())
+            .header("x-api-key", pc.apiKey())
             .header("anthropic-version", "2023-06-01")
             .build();
 
@@ -79,8 +84,9 @@ public class AnthropicProvider implements LlmProvider {
     }
 
     String buildRequestBody(List<Message> history, LlmConfig config) {
+        ProviderConfig pc = config.providers().get(0);
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("model", config.provider().model());
+        body.put("model", pc.model());
         body.put("max_tokens", config.options().maxTokens());
         body.put("stream", true);
 
@@ -97,10 +103,10 @@ public class AnthropicProvider implements LlmProvider {
             body.put("system", config.options().systemPrompt());
         }
 
-        if (config.options().thinking() != null && config.options().thinking().enabled()) {
+        if (pc.thinking() != null && pc.thinking().enabled()) {
             Map<String, Object> thinking = new LinkedHashMap<>();
             thinking.put("type", "enabled");
-            thinking.put("budget_tokens", config.options().thinking().budgetTokens());
+            thinking.put("budget_tokens", pc.thinking().budgetTokens());
             body.put("thinking", thinking);
         }
 

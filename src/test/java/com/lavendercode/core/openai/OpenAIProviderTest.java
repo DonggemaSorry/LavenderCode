@@ -52,8 +52,8 @@ class OpenAIProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            new ProviderConfig("openai", "gpt-4o", baseUrl, "sk-test"),
-            new Options(2048, "You are helpful.", null)
+            List.of(new ProviderConfig("openai", "openai", "gpt-4o", baseUrl, "sk-test", null)),
+            new Options(2048, "You are helpful.")
         );
 
         List<Message> history = List.of(
@@ -95,8 +95,8 @@ class OpenAIProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            new ProviderConfig("openai", "gpt-4o", baseUrl, "sk-test"),
-            new Options(2048, null, null)
+            List.of(new ProviderConfig("openai", "openai", "gpt-4o", baseUrl, "sk-test", null)),
+            new Options(2048, null)
         );
 
         List<Message> history = List.of(new Message(Role.USER, "Hi"));
@@ -135,8 +135,8 @@ class OpenAIProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            new ProviderConfig("openai", "gpt-4o", baseUrl, "sk-test"),
-            new Options(2048, null, null)
+            List.of(new ProviderConfig("openai", "openai", "gpt-4o", baseUrl, "sk-test", null)),
+            new Options(2048, null)
         );
 
         List<Message> history = List.of(new Message(Role.USER, "Hi"));
@@ -158,8 +158,8 @@ class OpenAIProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            new ProviderConfig("openai", "gpt-4o", baseUrl, "bad-key"),
-            new Options(2048, null, null)
+            List.of(new ProviderConfig("openai", "openai", "gpt-4o", baseUrl, "bad-key", null)),
+            new Options(2048, null)
         );
 
         List<Message> history = List.of(new Message(Role.USER, "Hi"));
@@ -183,8 +183,8 @@ class OpenAIProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            new ProviderConfig("openai", "gpt-4o", baseUrl, "key"),
-            new Options(2048, null, null)
+            List.of(new ProviderConfig("openai", "openai", "gpt-4o", baseUrl, "key", null)),
+            new Options(2048, null)
         );
 
         List<Message> history = List.of(new Message(Role.USER, "Hi"));
@@ -211,8 +211,8 @@ class OpenAIProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            new ProviderConfig("openai", "gpt-4o", baseUrl, "key"),
-            new Options(2048, null, null)
+            List.of(new ProviderConfig("openai", "openai", "gpt-4o", baseUrl, "key", null)),
+            new Options(2048, null)
         );
 
         List<Message> history = List.of(new Message(Role.USER, "Hi"));
@@ -238,8 +238,8 @@ class OpenAIProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            new ProviderConfig("openai", "gpt-4o", baseUrl, "key"),
-            new Options(2048, "", null)
+            List.of(new ProviderConfig("openai", "openai", "gpt-4o", baseUrl, "key", null)),
+            new Options(2048, "")
         );
 
         List<Message> history = List.of(new Message(Role.USER, "Hi"));
