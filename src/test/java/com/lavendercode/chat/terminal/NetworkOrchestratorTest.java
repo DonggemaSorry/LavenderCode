@@ -9,6 +9,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.concurrent.*;
 import java.util.function.Consumer;
 
@@ -37,7 +38,7 @@ class NetworkOrchestratorTest {
         when(provider.protocol()).thenReturn("openai-compatible");
         chatService = mock(ChatService.class);
         LlmConfig config = new LlmConfig(
-            new ProviderConfig("openai-compatible", "gpt-4", "http://localhost", "key"), null);
+            List.of(new ProviderConfig("openai-compatible", "openai-compatible", "gpt-4", "http://localhost", "key", null)), null);
 
         orchestrator = new NetworkOrchestrator(
             chatService, deltaBuffer, renderQueue, inputQueue,

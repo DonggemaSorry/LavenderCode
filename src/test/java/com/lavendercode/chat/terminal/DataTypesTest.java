@@ -16,12 +16,6 @@ class DataTypesTest {
     }
 
     @Test
-    void deltaThinkingShouldStoreText() {
-        var e = new DeltaEvent.Thinking("reasoning");
-        assertThat(e.text()).isEqualTo("reasoning");
-    }
-
-    @Test
     void deltaCompleteShouldInstantiate() {
         assertThat(new DeltaEvent.Complete()).isNotNull();
     }

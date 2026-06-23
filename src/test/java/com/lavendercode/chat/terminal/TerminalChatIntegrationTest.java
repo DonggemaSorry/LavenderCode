@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Iterator;
+import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -86,7 +87,7 @@ class TerminalChatIntegrationTest {
         chatService = new StreamingChatService();
 
         LlmConfig config = new LlmConfig(
-            new ProviderConfig("openai-compatible", "gpt-4", "http://localhost", "key"), null);
+            List.of(new ProviderConfig("openai-compatible", "openai-compatible", "gpt-4", "http://localhost", "key", null)), null);
 
         orchestrator = new NetworkOrchestrator(
             chatService, deltaBuffer, renderQueue, inputQueue,
@@ -128,11 +129,12 @@ class TerminalChatIntegrationTest {
         pollUntil(RenderEvent.AddUserMessage.class);
 
         inputQueue.put(new InputEvent.ExecuteCommand(InputEvent.CommandType.CLEAR, ""));
-        inputQueue.put(new InputEvent.Shutdown());
 
         RenderEvent event = pollUntil(RenderEvent.ClearChat.class);
         assertThat(event).isNotNull();
         assertThat(event).isInstanceOf(RenderEvent.ClearChat.class);
+
+        inputQueue.put(new InputEvent.Shutdown());
     }
 
     @Test

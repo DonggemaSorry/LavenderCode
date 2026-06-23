@@ -34,9 +34,14 @@ public class RequestContext {
         if (activeCall != null) {
             activeCall.cancel();
         }
+        // Close the iterator on a daemon thread to avoid blocking the
+        // calling thread (e.g. handleShutdown on the NetworkThread) while
+        // the I/O thread holds the BufferedReader lock inside readLine().
         StreamEventIterator activeIterator = iterator;
         if (activeIterator != null) {
-            activeIterator.close();
+            Thread cleanup = new Thread(activeIterator::close, "lavender-cancel-cleanup");
+            cleanup.setDaemon(true);
+            cleanup.start();
         }
     }
 }

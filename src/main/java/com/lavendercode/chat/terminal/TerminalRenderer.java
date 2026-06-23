@@ -31,6 +31,10 @@ public class TerminalRenderer {
     private int inputLastRow;
     private int separatorBotRow;
 
+    private List<LineWithRole> flatLineCache;
+    private int[] blockStartLines;
+    private boolean flatCacheDirty = true;
+
     public TerminalRenderer(Terminal terminal, BlockingQueue<RenderEvent> renderQueue,
                             Theme theme, String modelName, InputAreaLayout inputLayout) {
         this.terminal = terminal;
@@ -101,12 +105,12 @@ public class TerminalRenderer {
                 addBlock(Role.USER, text);
             }
             case RenderEvent.AddSystemMessage(var text) -> addBlock(Role.SYSTEM, text);
-            case RenderEvent.ThinkDelta(var text) -> appendThinking(text);
             case RenderEvent.ClearChat() -> {
                 blocks.clear();
                 currentAIBlock = null;
                 viewportStart = 0;
                 tokenCount = 0;
+                flatCacheDirty = true;
                 drawFull();
             }
             case RenderEvent.ScrollTo(int n) -> {
@@ -127,8 +131,8 @@ public class TerminalRenderer {
                 reflowAll();
                 drawFull();
             }
-            case RenderEvent.StatusUpdate(var m, int tc, boolean __) -> {
-                this.modelName = m;
+            case RenderEvent.StatusUpdate(var pm, var mn, var st, int tc) -> {
+                this.modelName = mn;
                 this.tokenCount = tc;
                 drawStatusBar();
             }
@@ -331,10 +335,12 @@ public class TerminalRenderer {
         if (currentAIBlock == null) {
             currentAIBlock = new MessageBlock(Role.ASSISTANT);
             blocks.add(currentAIBlock);
+            flatCacheDirty = true;
         }
         int oldCount = currentAIBlock.lineCount();
         int aiWidth = Math.max(1, terminal.getWidth() - 3); // "│ " prefix(2) + scrollbar(1)
         currentAIBlock.append(text, aiWidth);
+        flatCacheDirty = true;
         int added = currentAIBlock.lineCount() - oldCount;
         if (added > 0) {
             int firstRow = STATUS_HEIGHT + (blockToGlobalRow(currentAIBlock) + oldCount - viewportStart);
@@ -350,9 +356,11 @@ public class TerminalRenderer {
         if (currentAIBlock == null) {
             currentAIBlock = new MessageBlock(Role.ASSISTANT);
             blocks.add(currentAIBlock);
+            flatCacheDirty = true;
         }
         int thinkWidth = Math.max(1, terminal.getWidth() - 5); // "│ " prefix(2) + indent(2) + scrollbar(1)
         currentAIBlock.appendThinking(text, thinkWidth);
+        flatCacheDirty = true;
         if (autoScroll) {
             scrollToBottom();
             drawViewport();
@@ -368,6 +376,7 @@ public class TerminalRenderer {
         block.append(text, contentWidth);
         block.markComplete();
         blocks.add(block);
+        flatCacheDirty = true;
         if (autoScroll) scrollToBottom();
         drawViewport();
     }
@@ -394,24 +403,39 @@ public class TerminalRenderer {
 
     // ===== helpers =====
 
-    private int totalContentLines() { return blocks.stream().mapToInt(MessageBlock::lineCount).sum(); }
+    private void rebuildFlatCache() {
+        flatLineCache = new ArrayList<>();
+        blockStartLines = new int[blocks.size()];
+        int row = 0;
+        for (int i = 0; i < blocks.size(); i++) {
+            MessageBlock block = blocks.get(i);
+            blockStartLines[i] = row;
+            List<RenderedLine> lines = block.allLines();
+            for (int j = 0; j < lines.size(); j++) {
+                flatLineCache.add(new LineWithRole(lines.get(j), block.role(), j == 0));
+            }
+            row += lines.size();
+        }
+        flatCacheDirty = false;
+    }
+
+    private int totalContentLines() {
+        if (flatCacheDirty) rebuildFlatCache();
+        return flatLineCache.size();
+    }
 
     private int blockToGlobalRow(MessageBlock block) {
-        int row = 0;
-        for (MessageBlock b : blocks) { if (b == block) return row; row += b.lineCount(); }
-        return row;
+        if (flatCacheDirty) rebuildFlatCache();
+        int idx = blocks.indexOf(block);
+        return idx >= 0 && idx < blockStartLines.length ? blockStartLines[idx] : 0;
     }
 
     private record LineWithRole(RenderedLine line, Role role, boolean isFirstLine) {}
 
     private LineWithRole getLineWithRole(int globalIndex) {
-        int remaining = globalIndex;
-        for (MessageBlock block : blocks) {
-            List<RenderedLine> lines = block.allLines();
-            if (remaining < lines.size()) {
-                return new LineWithRole(lines.get(remaining), block.role(), remaining == 0);
-            }
-            remaining -= lines.size();
+        if (flatCacheDirty) rebuildFlatCache();
+        if (globalIndex >= 0 && globalIndex < flatLineCache.size()) {
+            return flatLineCache.get(globalIndex);
         }
         return null;
     }
@@ -420,6 +444,7 @@ public class TerminalRenderer {
         int reflowWidth = Math.max(1, terminal.getWidth() - 3); // conservative: 2-char prefix + scrollbar
         blocks.forEach(b -> b.reflow(reflowWidth));
         clampViewport();
+        flatCacheDirty = true;
     }
 
     private String padRight(String s, int width) {

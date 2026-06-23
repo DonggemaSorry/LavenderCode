@@ -83,8 +83,10 @@ public class TerminalChatApplication {
         inputSystem.requestShutdown();
         inputQueue.offer(new InputEvent.Shutdown());
 
-        networkThread.join(2_000);
-        inputThread.join(2_000);
+        networkThread.interrupt();
+        networkThread.join(100);
+        inputThread.interrupt();
+        inputThread.join(100);
 
         timerScheduler.shutdownNow();
         chatService.shutdown();

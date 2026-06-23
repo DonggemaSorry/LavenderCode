@@ -37,7 +37,7 @@ public class LavenderCode {
             return;
         }
 
-        LlmProvider provider = ProviderRegistry.get(config.provider().protocol());
+        LlmProvider provider = ProviderRegistry.get(config.providers().get(0).protocol());
         SessionManager sessionManager = new InMemorySessionManager();
 
         Terminal terminal = TerminalBuilder.builder()
@@ -47,7 +47,7 @@ public class LavenderCode {
 
         TerminalChatApplication app = new TerminalChatApplication(
             sessionManager, provider,
-            config.provider().model(), config,
+            config.providers().get(0).model(), config,
             Theme.dark()
         );
         app.run(terminal);

@@ -19,11 +19,11 @@ class LavenderCodeStartupTest {
     void shouldCreateSessionWithProviderFromConfig(@TempDir Path tempDir) throws Exception {
         // Write a config file
         String yaml = """
-            provider:
-              protocol: anthropic
-              model: claude-sonnet-4-20250514
-              base_url: https://api.anthropic.com
-              api_key: sk-ant-test
+            providers:
+              - protocol: anthropic
+                model: claude-sonnet-4-20250514
+                base_url: https://api.anthropic.com
+                api_key: sk-ant-test
             options:
               max_tokens: 4096
               system_prompt: "You are a helpful assistant."
@@ -33,11 +33,11 @@ class LavenderCodeStartupTest {
 
         // Load config
         LlmConfig config = ConfigLoader.load(configFile);
-        assertThat(config.provider().protocol()).isEqualTo("anthropic");
-        assertThat(config.provider().model()).isEqualTo("claude-sonnet-4-20250514");
+        assertThat(config.providers().get(0).protocol()).isEqualTo("anthropic");
+        assertThat(config.providers().get(0).model()).isEqualTo("claude-sonnet-4-20250514");
 
         // Get provider from registry
-        LlmProvider provider = ProviderRegistry.get(config.provider().protocol());
+        LlmProvider provider = ProviderRegistry.get(config.providers().get(0).protocol());
         assertThat(provider).isNotNull();
         assertThat(provider.protocol()).isEqualTo("anthropic");
 
@@ -54,6 +54,6 @@ class LavenderCodeStartupTest {
         }
 
         LlmConfig config = ConfigLoader.load(configFile);
-        assertThat(config.provider().protocol()).isEqualTo("anthropic");
+        assertThat(config.providers().get(0).protocol()).isEqualTo("anthropic");
     }
 }

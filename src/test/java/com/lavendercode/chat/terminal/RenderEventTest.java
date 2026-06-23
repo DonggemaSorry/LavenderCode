@@ -33,13 +33,6 @@ class RenderEventTest {
         assertThat(e.text()).isEqualTo("err");
     }
 
-    // ---- ThinkDelta ----
-    @Test
-    void thinkDeltaShouldStoreText() {
-        var e = new RenderEvent.ThinkDelta("reasoning");
-        assertThat(e.text()).isEqualTo("reasoning");
-    }
-
     // ---- ScrollTo ----
     @Test
     void scrollToShouldRejectNegativeIndex() {
@@ -89,10 +82,9 @@ class RenderEventTest {
     // ---- StatusUpdate ----
     @Test
     void statusUpdateShouldStoreFields() {
-        var e = new RenderEvent.StatusUpdate("claude", 1234, true);
-        assertThat(e.model()).isEqualTo("claude");
+        var e = new RenderEvent.StatusUpdate("claude", "claude-sonnet-4", "streaming", 1234);
+        assertThat(e.modelName()).isEqualTo("claude-sonnet-4");
         assertThat(e.tokenCount()).isEqualTo(1234);
-        assertThat(e.isEstimating()).isTrue();
     }
 
     // ---- RefreshInputChrome ----
@@ -170,12 +162,6 @@ class RenderEventTest {
     @Test
     void addSystemMessageShouldRejectNull() {
         assertThatThrownBy(() -> new RenderEvent.AddSystemMessage(null))
-            .isInstanceOf(NullPointerException.class);
-    }
-
-    @Test
-    void thinkDeltaShouldRejectNull() {
-        assertThatThrownBy(() -> new RenderEvent.ThinkDelta(null))
             .isInstanceOf(NullPointerException.class);
     }
 

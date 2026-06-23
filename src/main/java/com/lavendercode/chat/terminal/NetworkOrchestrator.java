@@ -35,7 +35,7 @@ public class NetworkOrchestrator {
     }
 
     public void run() {
-        safePut(new RenderEvent.StatusUpdate(modelName, 0, false));
+        safePut(new RenderEvent.StatusUpdate("", modelName, "", 0));
         try {
             while (true) {
                 InputEvent event = inputQueue.poll(100, TimeUnit.MILLISECONDS);
@@ -120,8 +120,21 @@ public class NetworkOrchestrator {
     private void handleShutdown() {
         RequestContext ctx = currentRequest.getAndSet(null);
         if (ctx != null) chatService.cancel(ctx);
-        deltaBuffer.forceFlush();
+        deltaBuffer.clear();
+
+        // Drain the render queue of all pending events so the renderer
+        // does not waste time processing streaming deltas before Shutdown.
+        drainRenderQueue();
+
         safePut(new RenderEvent.Shutdown());
+    }
+
+    /**
+     * Drains all pending events from the render queue.
+     * During shutdown, no historical events need to be preserved.
+     */
+    private void drainRenderQueue() {
+        renderQueue.drainTo(new java.util.ArrayList<>());
     }
 
     private void onDeltaReceived(RequestContext ctx, DeltaEvent delta) {
@@ -130,10 +143,8 @@ public class NetworkOrchestrator {
         switch (delta) {
             case DeltaEvent.Content(String t) ->
                 deltaBuffer.append(new DeltaBuffer.BufferedEvent(DeltaBuffer.BufferedEvent.Type.CONTENT_DELTA, t, 0));
-            case DeltaEvent.Thinking(String t) ->
-                deltaBuffer.append(new DeltaBuffer.BufferedEvent(DeltaBuffer.BufferedEvent.Type.THINK_DELTA, t, 0));
             case DeltaEvent.Usage(int i, int o) ->
-                safePut(new RenderEvent.StatusUpdate(modelName, i + o, false));
+                safePut(new RenderEvent.StatusUpdate("", modelName, "", i + o));
             case DeltaEvent.Complete() -> {
                 if (currentRequest.compareAndSet(ctx, null)) {
                     deltaBuffer.forceFlush();

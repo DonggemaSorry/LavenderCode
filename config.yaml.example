@@ -1,13 +1,13 @@
 # LavenderCode Configuration
-provider:
-  protocol: anthropic          # Options: anthropic, openai
-  model: claude-sonnet-4-20250514
-  base_url: https://api.anthropic.com
-  api_key: your-api-key-here
+providers:
+  - protocol: anthropic          # Options: anthropic, openai
+    model: claude-sonnet-4-20250514
+    base_url: https://api.anthropic.com
+    api_key: your-api-key-here
+    thinking:
+      enabled: false
+      budget_tokens: 4000
 
 options:
   max_tokens: 4096
   system_prompt: "You are a helpful AI assistant."
-  thinking:
-    enabled: false
-    budget_tokens: 4000
