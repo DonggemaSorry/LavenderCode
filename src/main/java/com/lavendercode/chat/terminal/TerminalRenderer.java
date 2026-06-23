@@ -19,7 +19,9 @@ public class TerminalRenderer {
     private int viewportStart;
     private boolean autoScroll = true;
     private Theme theme;
+    private String providerName = "";
     private String modelName = "";
+    private String statusText = null;
     private int tokenCount = 0;
 
     private static final int STATUS_HEIGHT = 1;
@@ -36,11 +38,13 @@ public class TerminalRenderer {
     private boolean flatCacheDirty = true;
 
     public TerminalRenderer(Terminal terminal, BlockingQueue<RenderEvent> renderQueue,
-                            Theme theme, String modelName, InputAreaLayout inputLayout) {
+                            Theme theme, String providerName, String modelName,
+                            InputAreaLayout inputLayout) {
         this.terminal = terminal;
         this.renderQueue = renderQueue;
         this.blocks = new ArrayList<>();
         this.theme = theme;
+        this.providerName = providerName != null ? providerName : "";
         this.modelName = modelName != null ? modelName : "";
         this.inputLayout = inputLayout;
         recalcLayout();
@@ -96,8 +100,14 @@ public class TerminalRenderer {
             case RenderEvent.AppendToMessage(var text) -> appendToAIBlock(text);
             case RenderEvent.FinalizeMessage() -> {
                 if (currentAIBlock != null) {
+                    String rawText = currentAIBlock.getRawText();
+                    int contentWidth = terminal.getWidth() - 4;
+                    List<RenderedLine> styled = MarkdownRenderer.render(rawText, contentWidth);
+                    currentAIBlock.replaceLines(styled);
                     currentAIBlock.markComplete();
                     currentAIBlock = null;
+                    flatCacheDirty = true;
+                    drawFull();
                 }
             }
             case RenderEvent.AddUserMessage(var text) -> {
@@ -131,8 +141,10 @@ public class TerminalRenderer {
                 reflowAll();
                 drawFull();
             }
-            case RenderEvent.StatusUpdate(var pm, var mn, var st, int tc) -> {
+            case RenderEvent.StatusUpdate(var pn, var mn, var st, int tc) -> {
+                this.providerName = pn;
                 this.modelName = mn;
+                this.statusText = st;
                 this.tokenCount = tc;
                 drawStatusBar();
             }
@@ -231,10 +243,34 @@ public class TerminalRenderer {
     }
 
     private void drawStatusBar() {
-        String status = String.format("Model: %s | Tokens: %d | Theme: %s",
-            modelName, tokenCount, theme.name());
-        AttributedString styled = theme.apply(StyleCatalog.STATUS_BAR,
-            padRight(status, terminal.getWidth()));
+        int w = terminal.getWidth();
+        int colW = w / 3;
+
+        String left = providerName.isEmpty() ? modelName : providerName;
+        if (left.length() > colW - 1) left = left.substring(0, colW - 1);
+
+        String mid = statusText != null ? statusText : "";
+        if (mid.length() > colW - 2) mid = mid.substring(0, colW - 2);
+
+        String right = modelName;
+        if (right.length() > colW - 1) right = right.substring(0, colW - 1);
+
+        // Center mid within its column
+        int midTotalPad = Math.max(0, colW - mid.length());
+        int midLeftPad = midTotalPad / 2;
+
+        StringBuilder bar = new StringBuilder();
+        bar.append(padRight(left, colW));
+        bar.append("|");
+        bar.append(" ".repeat(midLeftPad));
+        bar.append(mid);
+        bar.append(" ".repeat(midTotalPad - midLeftPad));
+        bar.append("|");
+        // Right-aligned model name
+        bar.append(" ".repeat(Math.max(0, colW - right.length())));
+        bar.append(right);
+
+        AttributedString styled = theme.apply(StyleCatalog.STATUS_BAR, bar.toString());
         terminal.puts(InfoCmp.Capability.cursor_address, 0, 0);
         terminal.puts(InfoCmp.Capability.clr_eol);
         terminal.writer().print(styled.toAnsi(terminal));

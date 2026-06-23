@@ -102,6 +102,30 @@ public class MessageBlock {
         recalcLineCount();
     }
 
+    /**
+     * Returns the concatenated raw text of all content segments,
+     * suitable for markdown re-rendering.
+     */
+    public String getRawText() {
+        StringBuilder sb = new StringBuilder();
+        for (Segment seg : segments) {
+            if (seg instanceof ContentSegment cs) {
+                sb.append(cs.rawText);
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Replaces the cached rendered lines with externally-styled lines
+     * (e.g. from markdown rendering), bypassing wrapAndColor.
+     */
+    public void replaceLines(List<RenderedLine> newLines) {
+        cachedLines = new ArrayList<>(newLines);
+        cachedLineCount = newLines.size();
+        linesDirty = false;
+    }
+
     // --- Private helpers ---
 
     private void ensureLastContentSegment() {
