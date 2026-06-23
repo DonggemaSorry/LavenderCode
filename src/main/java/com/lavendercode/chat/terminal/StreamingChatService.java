@@ -66,7 +66,7 @@ public class StreamingChatService implements ChatService {
     public void shutdown() {
         ioPool.shutdownNow();
         try {
-            ioPool.awaitTermination(2, java.util.concurrent.TimeUnit.SECONDS);
+            ioPool.awaitTermination(50, java.util.concurrent.TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -75,7 +75,7 @@ public class StreamingChatService implements ChatService {
     private DeltaEvent toDeltaEvent(StreamEvent se) {
         return switch (se) {
             case StreamEvent.ContentDelta cd  -> new DeltaEvent.Content(cd.text());
-            case StreamEvent.ThinkingDelta td -> new DeltaEvent.Thinking(td.text());
+            case StreamEvent.ThinkingDelta td -> null;  // discard thinking
             case StreamEvent.StreamComplete sc -> null;
             case StreamEvent.StreamError err  -> new DeltaEvent.Error(err.message(), err.statusCode());
         };
