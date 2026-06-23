@@ -2,10 +2,12 @@ package com.lavendercode;
 
 import com.lavendercode.chat.session.InMemorySessionManager;
 import com.lavendercode.chat.session.SessionManager;
+import com.lavendercode.chat.terminal.ProviderSelector;
 import com.lavendercode.chat.terminal.TerminalChatApplication;
 import com.lavendercode.chat.terminal.Theme;
 import com.lavendercode.core.config.ConfigLoader;
 import com.lavendercode.core.config.LlmConfig;
+import com.lavendercode.core.config.ProviderConfig;
 import com.lavendercode.core.provider.LlmProvider;
 import com.lavendercode.core.provider.ProviderRegistry;
 import org.jline.terminal.Terminal;
@@ -37,17 +39,28 @@ public class LavenderCode {
             return;
         }
 
-        LlmProvider provider = ProviderRegistry.get(config.providers().get(0).protocol());
-        SessionManager sessionManager = new InMemorySessionManager();
-
         Terminal terminal = TerminalBuilder.builder()
             .name("LavenderCode")
             .system(true)
             .build();
 
+        ProviderConfig selectedProvider;
+        if (config.providers().size() == 1) {
+            selectedProvider = config.providers().get(0);
+        } else {
+            selectedProvider = ProviderSelector.select(terminal, config.providers());
+        }
+
+        String providerName = selectedProvider.name() != null
+            ? selectedProvider.name()
+            : selectedProvider.protocol() + "-" + selectedProvider.model();
+
+        LlmProvider provider = ProviderRegistry.get(selectedProvider.protocol());
+        SessionManager sessionManager = new InMemorySessionManager();
+
         TerminalChatApplication app = new TerminalChatApplication(
             sessionManager, provider,
-            config.providers().get(0).model(), config,
+            providerName, selectedProvider.model(), config,
             Theme.dark()
         );
         app.run(terminal);

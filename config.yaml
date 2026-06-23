@@ -1,0 +1,11 @@
+# LavenderCode Configuration
+providers:
+  - name: DeepSeek
+    protocol: openai
+    model: deepseek-chat
+    base_url: https://api.deepseek.com
+    api_key: sk-355a51eed83842ceb04230c48f2a3532
+
+options:
+  max_tokens: 4096
+  system_prompt: "You are a helpful AI assistant."

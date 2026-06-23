@@ -91,7 +91,8 @@ class TerminalChatIntegrationTest {
 
         orchestrator = new NetworkOrchestrator(
             chatService, deltaBuffer, renderQueue, inputQueue,
-            sessionManager, provider, "gpt-4", config
+            sessionManager, provider, "test-provider", "gpt-4", config,
+            scheduler
         );
 
         networkThread = new Thread(orchestrator::run, "lavender-network-test");

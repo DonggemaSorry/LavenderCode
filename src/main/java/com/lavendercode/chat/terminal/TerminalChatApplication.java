@@ -14,17 +14,20 @@ public class TerminalChatApplication {
 
     private final SessionManager sessionManager;
     private final LlmProvider provider;
+    private final String providerName;
     private final String modelName;
     private final LlmConfig config;
     private final Theme theme;
 
     public TerminalChatApplication(SessionManager sessionManager,
                                    LlmProvider provider,
+                                   String providerName,
                                    String modelName,
                                    LlmConfig config,
                                    Theme theme) {
         this.sessionManager = sessionManager;
         this.provider = provider;
+        this.providerName = providerName;
         this.modelName = modelName;
         this.config = config;
         this.theme = theme;
@@ -45,11 +48,12 @@ public class TerminalChatApplication {
         ChatService chatService = new StreamingChatService();
         NetworkOrchestrator orchestrator = new NetworkOrchestrator(
             chatService, deltaBuffer, renderQueue, inputQueue,
-            sessionManager, provider, modelName, config
+            sessionManager, provider, providerName, modelName, config,
+            timerScheduler
         );
         InputAreaLayout inputLayout = new InputAreaLayout();
         TerminalRenderer renderer = new TerminalRenderer(
-            terminal, renderQueue, theme, modelName, inputLayout);
+            terminal, renderQueue, theme, providerName, modelName, inputLayout);
         InputSystem inputSystem = new InputSystem(terminal, inputQueue, renderQueue, inputLayout);
 
         // Threads
