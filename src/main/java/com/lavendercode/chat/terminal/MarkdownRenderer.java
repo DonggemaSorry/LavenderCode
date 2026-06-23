@@ -150,30 +150,47 @@ public final class MarkdownRenderer {
 
         void append(String text, AttributedStyle style) {
             if (text == null || text.isEmpty()) return;
-            for (int i = 0; i < text.length(); i++) {
-                char c = text.charAt(i);
-                if (c == '\n') {
+            for (int i = 0; i < text.length(); ) {
+                int cp = text.codePointAt(i);
+                int charCount = Character.charCount(cp);
+                if (cp == '\n') {
                     addSegment(style);
                     finishLine();
                 } else {
-                    currentLine.append(c);
+                    String ch = text.substring(i, i + charCount);
+                    currentLine.append(ch);
                     currentSegments.add(new AttributedString(currentLine.toString(), style));
                     currentLine.setLength(0);
                     if (displayWidth() >= width) {
                         finishLine();
                     }
                 }
+                i += charCount;
             }
         }
 
         int displayWidth() {
             int w = 0;
             if (blockPrefix != null) {
-                for (int i = 0; i < blockPrefix.length(); i++) w += charWidth(blockPrefix.charAt(i));
+                for (int i = 0; i < blockPrefix.length(); ) {
+                    int cp = blockPrefix.codePointAt(i);
+                    w += charWidth(cp);
+                    i += Character.charCount(cp);
+                }
             }
             for (AttributedString seg : currentSegments) {
                 String s = seg.toString();
-                for (int i = 0; i < s.length(); i++) w += charWidth(s.charAt(i));
+                if (s == null || s.isEmpty()) continue;
+                for (int i = 0; i < s.length(); ) {
+                    int cp = s.codePointAt(i);
+                    w += charWidth(cp);
+                    i += Character.charCount(cp);
+                }
+            }
+            for (int i = 0; i < currentLine.length(); ) {
+                int cp = currentLine.codePointAt(i);
+                w += charWidth(cp);
+                i += Character.charCount(cp);
             }
             return w;
         }
@@ -205,9 +222,30 @@ public final class MarkdownRenderer {
         }
 
         int charWidth(int cp) {
+            // 0-width: control, format, non-spacing marks
+            int gc = Character.getType(cp);
+            if (gc == Character.CONTROL || gc == Character.FORMAT
+                    || gc == Character.NON_SPACING_MARK || gc == Character.ENCLOSING_MARK) {
+                return 0;
+            }
+            // 2-width: CJK, Hangul, Fullwidth
             if (cp >= 0x4E00 && cp <= 0x9FFF) return 2;
             if (cp >= 0xAC00 && cp <= 0xD7AF) return 2;
             if (cp >= 0xFF01 && cp <= 0xFF60) return 2;
+            if (cp >= 0x1100 && cp <= 0x115f) return 2;
+            if (cp >= 0x2e80 && cp <= 0xa4cf) return 2;
+            if (cp >= 0xf900 && cp <= 0xfaff) return 2;
+            if (cp >= 0xfe30 && cp <= 0xfe6f) return 2;
+            if (cp >= 0xffe0 && cp <= 0xffe6) return 2;
+            if (cp >= 0x20000 && cp <= 0x2fffd) return 2;
+            if (cp >= 0x30000 && cp <= 0x3fffd) return 2;
+            // 2-width: Emoji blocks (most modern emoji are wide)
+            if (cp >= 0x1F300 && cp <= 0x1F9FF) return 2;
+            if (cp >= 0x1FA00 && cp <= 0x1FAFF) return 2;
+            if (cp >= 0x2600 && cp <= 0x27BF) return 2;   // Misc symbols (includes some emoji)
+            if (cp >= 0x2300 && cp <= 0x23FF) return 2;   // Misc technical (includes some emoji)
+            // Variation selectors are 0-width
+            if (cp >= 0xFE00 && cp <= 0xFE0F) return 0;
             return 1;
         }
     }

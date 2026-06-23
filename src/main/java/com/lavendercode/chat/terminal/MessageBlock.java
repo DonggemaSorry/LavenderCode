@@ -145,14 +145,16 @@ public class MessageBlock {
 
     private void wrapAndColor(String raw, int width, List<RenderedLine> out) {
         StringBuilder currentLine = new StringBuilder();
-        for (int i = 0; i < raw.length(); i++) {
-            char c = raw.charAt(i);
-            if (c == '\n') {
+        for (int i = 0; i < raw.length(); ) {
+            int cp = raw.codePointAt(i);
+            int charCount = Character.charCount(cp);
+            if (cp == '\n') {
                 flushLineToOutput(currentLine.toString(), width, out);
                 currentLine.setLength(0);
             } else {
-                currentLine.append(c);
+                currentLine.appendCodePoint(cp);
             }
+            i += charCount;
         }
         if (currentLine.length() > 0) {
             flushLineToOutput(currentLine.toString(), width, out);
@@ -229,6 +231,13 @@ public class MessageBlock {
         if (codePoint >= 0xffe0 && codePoint <= 0xffe6)  return 2; // Fullwidth Signs
         if (codePoint >= 0x20000 && codePoint <= 0x2fffd) return 2; // SIP
         if (codePoint >= 0x30000 && codePoint <= 0x3fffd) return 2; // TIP
+
+        // Emoji blocks
+        if (codePoint >= 0x1F300 && codePoint <= 0x1F9FF) return 2;
+        if (codePoint >= 0x1FA00 && codePoint <= 0x1FAFF) return 2;
+        if (codePoint >= 0x2600 && codePoint <= 0x27BF) return 2;
+        if (codePoint >= 0x2300 && codePoint <= 0x23FF) return 2;
+        if (codePoint >= 0xFE00 && codePoint <= 0xFE0F) return 0;  // variation selectors
 
         // Zero-width: control chars, format chars, non-spacing marks
         int gc = Character.getType(codePoint);
