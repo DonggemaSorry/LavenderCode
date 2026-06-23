@@ -18,6 +18,7 @@ public final class LavenderSplash {
     private static final int ART_WIDTH = 24;
     private static final int ART_HEIGHT = 41;
 
+    private static final String VERSION = "2.0.0";
     private static final String TAGLINE = "\u7b49\u4f60\uff0c\u5728\u85b0\u8863\u8349\u76db\u5f00\u7684\u5730\u65b9";
     private static final String ORNAMENT = "\u2726";
 
@@ -99,6 +100,24 @@ public final class LavenderSplash {
         typewriterTagline(terminal, textRow, cols, taglineWidth);
 
         Thread.sleep(HOLD_MS);
+
+        // Show application info
+        int termWidth = terminal.getSize().getColumns();
+        terminal.writer().println();
+        String versionLine = "LavenderCode v" + VERSION;
+        int pad = Math.max(0, (termWidth - displayWidth(versionLine)) / 2);
+        terminal.writer().println(" ".repeat(pad) + versionLine);
+
+        String cwd = "cwd: " + System.getProperty("user.dir");
+        if (displayWidth(cwd) > termWidth) {
+            cwd = "cwd: \u2026" + System.getProperty("user.dir").substring(
+                Math.max(0, System.getProperty("user.dir").length() - termWidth + 6));
+        }
+        pad = Math.max(0, (termWidth - displayWidth(cwd)) / 2);
+        terminal.writer().println(" ".repeat(pad) + cwd);
+
+        terminal.writer().println("\u2500".repeat(Math.min(termWidth, 80)));
+        terminal.flush();
     }
 
     static int displayWidth(String text) {
