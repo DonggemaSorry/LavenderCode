@@ -1,6 +1,10 @@
 package com.lavendercode.core.provider;
 
+import com.lavendercode.core.tool.ToolCall;
+import com.lavendercode.core.tool.ToolResult;
 import org.junit.jupiter.api.Test;
+import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -57,5 +61,32 @@ class MessageTest {
     void shouldSupportSpecialCharacters() {
         var msg = new Message(Role.USER, "你好，世界！ 🌍 \n\t\b\r");
         assertThat(msg.content()).isEqualTo("你好，世界！ 🌍 \n\t\b\r");
+    }
+
+    @Test
+    void backwardCompat() {
+        Message m = new Message(Role.USER, "hello");
+        assertThat(m.content()).isEqualTo("hello");
+        assertThat(m.toolCalls()).isEmpty();
+        assertThat(m.toolResults()).isEmpty();
+        assertThat(m.toolCallId()).isNull();
+    }
+
+    @Test
+    void assistantWithTools() {
+        var tc = new ToolCall("id", "read", Map.of());
+        var m = Message.assistantWithTools(List.of(tc));
+        assertThat(m.role()).isEqualTo(Role.ASSISTANT);
+        assertThat(m.toolCalls()).contains(tc);
+        assertThat(m.content()).isNull();
+    }
+
+    @Test
+    void toolResult() {
+        var tr = ToolResult.success("ok", "c");
+        var m = Message.toolResult("cid", tr);
+        assertThat(m.role()).isEqualTo(Role.TOOL);
+        assertThat(m.toolCallId()).isEqualTo("cid");
+        assertThat(m.toolResults()).contains(tr);
     }
 }
