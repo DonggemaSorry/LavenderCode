@@ -4,15 +4,10 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.ServiceLoader;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class ToolRegistry {
     private static final Map<String, Tool> tools = new ConcurrentHashMap<>();
-
-    static {
-        ServiceLoader.load(Tool.class).forEach(ToolRegistry::register);
-    }
 
     public static void register(Tool tool) {
         tools.put(tool.name(), tool);

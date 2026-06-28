@@ -7,9 +7,11 @@ import com.lavendercode.chat.terminal.TerminalChatApplication;
 import com.lavendercode.chat.terminal.Theme;
 import com.lavendercode.core.config.ConfigLoader;
 import com.lavendercode.core.config.LlmConfig;
+import com.lavendercode.core.config.Options;
 import com.lavendercode.core.config.ProviderConfig;
 import com.lavendercode.core.provider.LlmProvider;
 import com.lavendercode.core.provider.ProviderRegistry;
+import com.lavendercode.core.tool.*;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 
@@ -54,6 +56,18 @@ public class LavenderCode {
         String providerName = selectedProvider.name() != null
             ? selectedProvider.name()
             : selectedProvider.protocol() + "-" + selectedProvider.model();
+
+        // Register tools with configured limits
+        Options opts = config.options();
+        if (opts.toolSystemEnabled()) {
+            ToolRegistry.register(new ReadFileTool(opts.readFileMaxLines()));
+            ToolRegistry.register(new WriteFileTool());
+            ToolRegistry.register(new EditFileTool());
+            ToolRegistry.register(new ExecuteCommandTool(opts.commandExecutionEnabled(),
+                opts.commandTimeoutSeconds(), opts.commandOutputMaxChars()));
+            ToolRegistry.register(new GlobTool(opts.searchMaxResults()));
+            ToolRegistry.register(new GrepTool(opts.searchMaxResults()));
+        }
 
         LlmProvider provider = ProviderRegistry.get(selectedProvider.protocol());
         SessionManager sessionManager = new InMemorySessionManager();
