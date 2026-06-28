@@ -8,6 +8,7 @@ import org.jline.utils.Signals;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 
 public class TerminalRenderer {
@@ -23,6 +24,7 @@ public class TerminalRenderer {
     private String modelName = "";
     private String statusText = null;
     private int tokenCount = 0;
+    private String currentToolName = "";
 
     private static final int STATUS_HEIGHT = 1;
 
@@ -147,6 +149,21 @@ public class TerminalRenderer {
                 this.statusText = st;
                 this.tokenCount = tc;
                 drawStatusBar();
+            }
+            case RenderEvent.ToolCallRender(var tcid, var tname, var params, var status) -> {
+                currentToolName = tname;
+                ensureAIBlock();
+                String paramsSummary = formatToolParams(tname, params);
+                int tw = Math.max(1, terminal.getWidth() - 3);
+                currentAIBlock.appendToolRow(tname, paramsSummary, status, null, true, tw);
+                drawFull();
+            }
+            case RenderEvent.ToolResultRender(var tcid, var summary, boolean ok, int len) -> {
+                ensureAIBlock();
+                String toolName = currentToolName;
+                int tw = Math.max(1, terminal.getWidth() - 3);
+                currentAIBlock.appendToolRow(toolName, null, "done", summary, ok, tw);
+                drawFull();
             }
             case RenderEvent.RefreshInputChrome(var done) -> {
                 drawInputDraft("", 0);
@@ -386,6 +403,34 @@ public class TerminalRenderer {
             scrollToBottom();
             drawViewport();
         }
+    }
+
+    private void ensureAIBlock() {
+        if (currentAIBlock == null) {
+            currentAIBlock = new MessageBlock(Role.ASSISTANT);
+            blocks.add(currentAIBlock);
+            flatCacheDirty = true;
+        }
+    }
+
+    private String formatToolParams(String toolName, Map<String, Object> params) {
+        if (params == null || params.isEmpty()) return "";
+        return switch (toolName) {
+            case "read_file", "write_file", "edit_file" -> {
+                Object path = params.get("path");
+                yield path != null ? path.toString() : "";
+            }
+            case "execute_command" -> {
+                Object cmd = params.get("command");
+                String s = cmd != null ? cmd.toString() : "";
+                yield s.length() > 60 ? s.substring(0, 57) + "..." : s;
+            }
+            case "search_file", "search_content" -> {
+                Object p = params.get("pattern");
+                yield p != null ? p.toString() : "";
+            }
+            default -> "";
+        };
     }
 
     private void appendThinking(String text) {
