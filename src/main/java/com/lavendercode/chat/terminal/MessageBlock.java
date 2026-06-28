@@ -251,8 +251,81 @@ public class MessageBlock {
 
     // --- Inner types ---
 
+    /**
+     * Appends or updates a tool execution row in this message block.
+     * The first call creates a placeholder; subsequent calls with the same toolName
+     * update params/results in place (Phase 2/3 of the 3-phase rendering).
+     */
+    public int appendToolRow(String toolName, String paramsSummary, String status,
+                              String resultSummary, boolean success, int terminalWidth) {
+        linesDirty = true;
+        int oldCount = lineCount();
+        ToolRowSegment seg = findOrCreateToolRow(toolName);
+        if (paramsSummary != null) seg.paramsSummary = paramsSummary;
+        if (status != null) seg.status = status;
+        if (resultSummary != null) seg.resultSummary = resultSummary;
+        seg.success = success;
+        seg.lines.clear();
+        rebuildToolRowLines(seg, terminalWidth);
+        recalcLineCount();
+        return lineCount() - oldCount;
+    }
+
+    private ToolRowSegment findOrCreateToolRow(String toolName) {
+        for (Segment s : segments) {
+            if (s instanceof ToolRowSegment trs && trs.toolName.equals(toolName)) {
+                return trs;
+            }
+        }
+        ToolRowSegment trs = new ToolRowSegment(toolName);
+        segments.add(trs);
+        return trs;
+    }
+
+    private void rebuildToolRowLines(ToolRowSegment seg, int terminalWidth) {
+        // Line 1: ● {toolName}({paramsSummary})  → {status}
+        StringBuilder header = new StringBuilder();
+        header.append("● ");
+        String shortName = switch (seg.toolName) {
+            case "read_file" -> "Read";
+            case "write_file" -> "Write";
+            case "edit_file" -> "Edit";
+            case "execute_command" -> "Bash";
+            case "search_file" -> "Glob";
+            case "search_content" -> "Grep";
+            default -> seg.toolName;
+        };
+        if (seg.paramsSummary != null && !seg.paramsSummary.isEmpty()) {
+            header.append(shortName).append("(").append(seg.paramsSummary).append(")");
+        } else {
+            header.append(shortName);
+        }
+        if (seg.status != null) {
+            header.append("  → ").append(seg.status);
+        }
+        // Truncate to fit
+        String headerStr = header.toString();
+        if (headerStr.length() > terminalWidth) {
+            headerStr = headerStr.substring(0, terminalWidth);
+        }
+        seg.lines.add(new RenderedLine(new AttributedString(headerStr,
+            AttributedStyle.DEFAULT.foreground(136, 136, 136))));
+
+        // Line 2 (if result available): "  {resultSummary}" in green/red
+        if (seg.resultSummary != null) {
+            AttributedStyle resultStyle = seg.success
+                ? AttributedStyle.DEFAULT.foreground(100, 200, 100)
+                : AttributedStyle.DEFAULT.foreground(220, 80, 80);
+            String resultStr = "  " + seg.resultSummary;
+            if (resultStr.length() > terminalWidth) {
+                resultStr = resultStr.substring(0, terminalWidth);
+            }
+            seg.lines.add(new RenderedLine(new AttributedString(resultStr, resultStyle)));
+        }
+    }
+
     private abstract static sealed class Segment
-            permits ContentSegment, ThinkingSegment {
+            permits ContentSegment, ThinkingSegment, ToolRowSegment {
         final List<RenderedLine> lines = new ArrayList<>();
     }
 
@@ -262,5 +335,16 @@ public class MessageBlock {
 
     private static final class ThinkingSegment extends Segment {
         final StringBuilder rawText = new StringBuilder();
+    }
+
+    private static final class ToolRowSegment extends Segment {
+        final String toolName;
+        String paramsSummary;
+        String status = "准备中…";
+        String resultSummary;
+        boolean success = true;
+        ToolRowSegment(String toolName) {
+            this.toolName = toolName;
+        }
     }
 }
