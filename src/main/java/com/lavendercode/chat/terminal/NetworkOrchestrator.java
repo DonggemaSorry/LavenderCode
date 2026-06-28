@@ -164,6 +164,15 @@ public class NetworkOrchestrator {
         switch (delta) {
             case DeltaEvent.Content(String t) ->
                 deltaBuffer.append(new DeltaBuffer.BufferedEvent(DeltaBuffer.BufferedEvent.Type.CONTENT_DELTA, t, 0));
+            case DeltaEvent.ToolCallStart tcs -> {
+                // Placeholder — implemented in Phase 12 (Task 33)
+            }
+            case DeltaEvent.ToolCallDelta tcd -> {
+                // Placeholder — implemented in Phase 12 (Task 33)
+            }
+            case DeltaEvent.ToolCallEnd tce -> {
+                // Placeholder — implemented in Phase 12 (Task 33)
+            }
             case DeltaEvent.Usage(int i, int o) ->
                 safePut(new RenderEvent.StatusUpdate(providerName, modelName, null, i + o));
             case DeltaEvent.Complete() -> {
