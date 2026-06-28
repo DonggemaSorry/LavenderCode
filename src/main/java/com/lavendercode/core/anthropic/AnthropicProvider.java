@@ -1,6 +1,7 @@
 package com.lavendercode.core.anthropic;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lavendercode.core.config.LlmConfig;
@@ -8,6 +9,7 @@ import com.lavendercode.core.config.ProviderConfig;
 import com.lavendercode.core.provider.*;
 import com.lavendercode.core.sse.SseEventReader;
 import com.lavendercode.core.sse.SseStreamEventIterator;
+import com.lavendercode.core.tool.ToolDefinition;
 import okhttp3.*;
 
 import java.io.IOException;
@@ -40,6 +42,15 @@ public class AnthropicProvider implements LlmProvider {
 
     @Override
     public StreamEventIterator streamChat(List<Message> history, LlmConfig config) {
+        return doStreamChat(history, config, null);
+    }
+
+    @Override
+    public StreamEventIterator streamChat(List<Message> history, LlmConfig config, List<ToolDefinition> toolDefs) {
+        return doStreamChat(history, config, toolDefs);
+    }
+
+    private StreamEventIterator doStreamChat(List<Message> history, LlmConfig config, List<ToolDefinition> toolDefs) {
         ProviderConfig pc = config.providers().get(0);
         String baseUrl = pc.baseUrl();
         if (baseUrl == null) {
@@ -49,7 +60,7 @@ public class AnthropicProvider implements LlmProvider {
             baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
         }
         String endpoint = baseUrl + "/v1/messages";
-        String requestBody = buildRequestBody(history, config);
+        String requestBody = buildRequestBody(history, config, toolDefs);
 
         Request request = new Request.Builder()
             .url(endpoint)
@@ -84,6 +95,10 @@ public class AnthropicProvider implements LlmProvider {
     }
 
     String buildRequestBody(List<Message> history, LlmConfig config) {
+        return buildRequestBody(history, config, null);
+    }
+
+    String buildRequestBody(List<Message> history, LlmConfig config, List<ToolDefinition> toolDefs) {
         ProviderConfig pc = config.providers().get(0);
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", pc.model());
@@ -94,13 +109,56 @@ public class AnthropicProvider implements LlmProvider {
         for (Message msg : history) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("role", msg.role().name().toLowerCase());
-            m.put("content", msg.content());
+
+            if (msg.role() == Role.ASSISTANT && !msg.toolCalls().isEmpty()) {
+                // Assistant message with tool_use
+                List<Map<String, Object>> contentBlocks = new ArrayList<>();
+                if (msg.content() != null && !msg.content().isEmpty()) {
+                    contentBlocks.add(Map.of("type", "text", "text", msg.content()));
+                }
+                for (var tc : msg.toolCalls()) {
+                    Map<String, Object> toolUse = new LinkedHashMap<>();
+                    toolUse.put("type", "tool_use");
+                    toolUse.put("id", tc.id());
+                    toolUse.put("name", tc.name());
+                    toolUse.put("input", tc.parameters());
+                    contentBlocks.add(toolUse);
+                }
+                m.put("content", contentBlocks);
+            } else if (msg.role() == Role.TOOL && !msg.toolResults().isEmpty()) {
+                // Tool result as user message with tool_result blocks
+                m.put("role", "user");
+                List<Map<String, Object>> contentBlocks = new ArrayList<>();
+                for (var tr : msg.toolResults()) {
+                    Map<String, Object> toolResult = new LinkedHashMap<>();
+                    toolResult.put("type", "tool_result");
+                    toolResult.put("tool_use_id", msg.toolCallId());
+                    toolResult.put("content", tr.content() != null ? tr.content() : tr.summary());
+                    contentBlocks.add(toolResult);
+                }
+                m.put("content", contentBlocks);
+            } else {
+                m.put("content", msg.content());
+            }
             messages.add(m);
         }
         body.put("messages", messages);
 
         if (config.options().systemPrompt() != null && !config.options().systemPrompt().isEmpty()) {
             body.put("system", config.options().systemPrompt());
+        }
+
+        // Add tools if provided
+        if (toolDefs != null && !toolDefs.isEmpty()) {
+            List<Map<String, Object>> anthropicTools = new ArrayList<>();
+            for (ToolDefinition td : toolDefs) {
+                Map<String, Object> t = new LinkedHashMap<>();
+                t.put("name", td.name());
+                t.put("description", td.description());
+                t.put("input_schema", td.parameters());
+                anthropicTools.add(t);
+            }
+            body.put("tools", anthropicTools);
         }
 
         if (pc.thinking() != null && pc.thinking().enabled()) {
@@ -117,12 +175,26 @@ public class AnthropicProvider implements LlmProvider {
         }
     }
 
+    private final Map<Integer, ToolAccum> toolAccumulators = new LinkedHashMap<>();
+
     StreamEvent parseSseEvent(String sseData) {
         try {
             JsonNode node = mapper.readTree(sseData);
             String type = node.get("type").asText();
 
             return switch (type) {
+                case "content_block_start" -> {
+                    JsonNode contentBlock = node.get("content_block");
+                    if (contentBlock != null && "tool_use".equals(contentBlock.get("type").asText())) {
+                        String toolId = contentBlock.get("id").asText();
+                        String toolName = contentBlock.get("name").asText();
+                        JsonNode indexNode = node.get("index");
+                        int index = indexNode != null ? indexNode.asInt() : 0;
+                        toolAccumulators.put(index, new ToolAccum(toolId, toolName));
+                        yield new StreamEvent.ToolCallStart(toolId, toolName);
+                    }
+                    yield null;
+                }
                 case "content_block_delta" -> {
                     JsonNode delta = node.get("delta");
                     String deltaType = delta.get("type").asText();
@@ -130,6 +202,33 @@ public class AnthropicProvider implements LlmProvider {
                         yield new StreamEvent.ContentDelta(delta.get("text").asText());
                     } else if ("thinking_delta".equals(deltaType)) {
                         yield new StreamEvent.ThinkingDelta(delta.get("thinking").asText());
+                    } else if ("input_json_delta".equals(deltaType)) {
+                        JsonNode idxNode = node.get("index");
+                        int index = idxNode != null ? idxNode.asInt() : 0;
+                        String partialJson = delta.get("partial_json").asText();
+                        ToolAccum tac = toolAccumulators.get(index);
+                        if (tac != null) {
+                            tac.jsonBuilder.append(partialJson);
+                            yield new StreamEvent.ToolCallDelta(tac.toolId, partialJson);
+                        }
+                        yield null;
+                    }
+                    yield null;
+                }
+                case "content_block_stop" -> {
+                    JsonNode idxNode = node.get("index");
+                    int index = idxNode != null ? idxNode.asInt() : 0;
+                    ToolAccum acc = toolAccumulators.remove(index);
+                    if (acc != null) {
+                        try {
+                            Map<String, Object> params = mapper.readValue(
+                                acc.jsonBuilder.toString(),
+                                new TypeReference<Map<String, Object>>() {}
+                            );
+                            yield new StreamEvent.ToolCallEnd(acc.toolId, acc.toolName, params);
+                        } catch (JsonProcessingException e) {
+                            yield new StreamEvent.ToolCallEnd(acc.toolId, acc.toolName, Map.of());
+                        }
                     }
                     yield null;
                 }
@@ -138,6 +237,16 @@ public class AnthropicProvider implements LlmProvider {
             };
         } catch (JsonProcessingException e) {
             return new StreamEvent.StreamError("Failed to parse SSE event: " + e.getMessage(), 0);
+        }
+    }
+
+    private static class ToolAccum {
+        final String toolId;
+        final String toolName;
+        final StringBuilder jsonBuilder = new StringBuilder();
+        ToolAccum(String toolId, String toolName) {
+            this.toolId = toolId;
+            this.toolName = toolName;
         }
     }
 
