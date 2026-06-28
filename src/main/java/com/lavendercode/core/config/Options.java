@@ -7,10 +7,35 @@ public record Options(
     int maxTokens,
 
     @JsonProperty("system_prompt")
-    String systemPrompt
+    String systemPrompt,
+
+    @JsonProperty("tool_system_enabled")
+    boolean toolSystemEnabled,
+
+    @JsonProperty("command_execution_enabled")
+    boolean commandExecutionEnabled,
+
+    @JsonProperty("command_timeout_seconds")
+    int commandTimeoutSeconds,
+
+    @JsonProperty("file_operation_timeout_seconds")
+    int fileOperationTimeoutSeconds,
+
+    @JsonProperty("read_file_max_lines")
+    int readFileMaxLines,
+
+    @JsonProperty("command_output_max_chars")
+    int commandOutputMaxChars,
+
+    @JsonProperty("search_max_results")
+    int searchMaxResults
 ) {
     public Options() {
-        this(4096, "");
+        this(4096, "", true, false, 120, 30, 2000, 30000, 200);
+    }
+
+    public Options(int maxTokens, String systemPrompt) {
+        this(maxTokens, systemPrompt, true, false, 120, 30, 2000, 30000, 200);
     }
 
     public Options {
