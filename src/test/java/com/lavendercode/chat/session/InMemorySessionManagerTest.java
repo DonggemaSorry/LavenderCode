@@ -2,10 +2,13 @@ package com.lavendercode.chat.session;
 
 import com.lavendercode.core.provider.Message;
 import com.lavendercode.core.provider.Role;
+import com.lavendercode.core.tool.ToolCall;
+import com.lavendercode.core.tool.ToolResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -79,5 +82,20 @@ class InMemorySessionManagerTest {
         history.clear(); // try to mutate returned list
 
         assertThat(sessionManager.getMessageCount()).isEqualTo(1);
+    }
+
+    @Test
+    void shouldAddToolMessagesToHistory() {
+        var mgr = new InMemorySessionManager();
+        var tc = new ToolCall("id", "read", Map.of("path", "/x"));
+        var tr = ToolResult.success("ok", "c");
+        mgr.addToolMessages(List.of(tc), List.of(tr));
+
+        List<Message> hist = mgr.getHistory();
+        assertThat(hist).hasSize(2);
+        assertThat(hist.get(0).role()).isEqualTo(Role.ASSISTANT);
+        assertThat(hist.get(0).toolCalls()).contains(tc);
+        assertThat(hist.get(1).role()).isEqualTo(Role.TOOL);
+        assertThat(hist.get(1).toolCallId()).isEqualTo("id");
     }
 }
