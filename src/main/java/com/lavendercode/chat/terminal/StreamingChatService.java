@@ -76,6 +76,9 @@ public class StreamingChatService implements ChatService {
         return switch (se) {
             case StreamEvent.ContentDelta cd  -> new DeltaEvent.Content(cd.text());
             case StreamEvent.ThinkingDelta td -> null;  // discard thinking
+            case StreamEvent.ToolCallStart tcs -> null; // handled in Phase 11 (Task 31)
+            case StreamEvent.ToolCallDelta tcd -> null; // handled in Phase 11 (Task 31)
+            case StreamEvent.ToolCallEnd tce   -> null; // handled in Phase 11 (Task 31)
             case StreamEvent.StreamComplete sc -> null;
             case StreamEvent.StreamError err  -> new DeltaEvent.Error(err.message(), err.statusCode());
         };

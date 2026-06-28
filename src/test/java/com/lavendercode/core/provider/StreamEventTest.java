@@ -1,6 +1,7 @@
 package com.lavendercode.core.provider;
 
 import org.junit.jupiter.api.Test;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -69,5 +70,27 @@ class StreamEventTest {
             result = "unknown";
         }
         assertThat(result).isEqualTo("delta:matched");
+    }
+
+    @Test
+    void toolCallStart() {
+        var e = new StreamEvent.ToolCallStart("id", "name");
+        assertThat(e.toolCallId()).isEqualTo("id");
+        assertThat(e.toolName()).isEqualTo("name");
+        assertThat(e).isInstanceOf(StreamEvent.class);
+    }
+
+    @Test
+    void toolCallDelta() {
+        var e = new StreamEvent.ToolCallDelta("id", "{}");
+        assertThat(e.jsonFragment()).isEqualTo("{}");
+        assertThat(e.toolCallId()).isEqualTo("id");
+    }
+
+    @Test
+    void toolCallEnd() {
+        var e = new StreamEvent.ToolCallEnd("id", "name", Map.of("k", "v"));
+        assertThat(e.parameters()).containsEntry("k", "v");
+        assertThat(e.toolCallId()).isEqualTo("id");
     }
 }
