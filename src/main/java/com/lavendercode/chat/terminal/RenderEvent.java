@@ -1,5 +1,6 @@
 package com.lavendercode.chat.terminal;
 
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 
@@ -16,6 +17,8 @@ public sealed interface RenderEvent
             RenderEvent.ClearChat,
             RenderEvent.WindowResize,
             RenderEvent.StatusUpdate,
+            RenderEvent.ToolCallRender,
+            RenderEvent.ToolResultRender,
             RenderEvent.RefreshInputChrome,
             RenderEvent.UpdateInputDraft,
             RenderEvent.RefreshAll,
@@ -86,6 +89,9 @@ public sealed interface RenderEvent
             }
         }
     }
+
+    record ToolCallRender(String toolCallId, String toolName, Map<String, Object> params, String status) implements RenderEvent {}
+    record ToolResultRender(String toolCallId, String summary, boolean success, int contentLength) implements RenderEvent {}
 
     record RefreshAll() implements RenderEvent {}
 
