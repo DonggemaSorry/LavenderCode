@@ -44,7 +44,7 @@ public class NetworkOrchestrator {
     private String responseContent = "";
     private int pendingToolMsgCount = 0; // tool messages in session to rollback on re-injection failure
     private int reInjectRound = 0;
-    private static final int MAX_REINJECT_ROUNDS = 5;
+    private static final int MAX_REINJECT_ROUNDS = 10;
 
     public NetworkOrchestrator(ChatService chatService, DeltaBuffer deltaBuffer,
                                BlockingQueue<RenderEvent> renderQueue,
