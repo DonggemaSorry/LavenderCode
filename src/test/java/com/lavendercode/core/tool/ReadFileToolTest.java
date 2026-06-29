@@ -51,8 +51,9 @@ class ReadFileToolTest {
     }
 
     @Test
-    void nonAbsolutePath() {
+    void relativePathIsResolved() {
+        // Relative paths are now resolved against the working directory instead of being rejected
         var r = tool.execute(Map.of("path", "relative.txt"));
-        assertThat(r.errorCategory()).isEqualTo("INVALID_PARAMETER");
+        assertThat(r.success()).isTrue();
     }
 }

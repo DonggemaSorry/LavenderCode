@@ -40,8 +40,9 @@ class WriteFileToolTest {
     }
 
     @Test
-    void nonAbsolutePath() {
+    void relativePathIsResolved() {
+        // Relative paths are now resolved against the working directory
         var r = tool.execute(Map.of("path", "relative.txt", "content", "x"));
-        assertThat(r.errorCategory()).isEqualTo("INVALID_PARAMETER");
+        assertThat(r.success()).isTrue();
     }
 }

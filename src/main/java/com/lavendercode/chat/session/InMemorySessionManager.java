@@ -25,7 +25,8 @@ public class InMemorySessionManager implements SessionManager {
     @Override
     public void addToolMessages(List<ToolCall> toolCalls, List<ToolResult> toolResults) {
         if (toolCalls != null && !toolCalls.isEmpty()) {
-            messages.add(Message.assistantWithTools(toolCalls));
+            // Defensive copy: the caller may clear toolCalls immediately after this call
+            messages.add(Message.assistantWithTools(new ArrayList<>(toolCalls)));
         }
         if (toolResults != null && !toolResults.isEmpty()) {
             for (int i = 0; i < toolResults.size(); i++) {
@@ -43,6 +44,15 @@ public class InMemorySessionManager implements SessionManager {
     @Override
     public void clear() {
         messages.clear();
+    }
+
+    @Override
+    public void removeLastMessages(int count) {
+        if (count <= 0) return;
+        int toRemove = Math.min(count, messages.size());
+        for (int i = 0; i < toRemove; i++) {
+            messages.remove(messages.size() - 1);
+        }
     }
 
     @Override

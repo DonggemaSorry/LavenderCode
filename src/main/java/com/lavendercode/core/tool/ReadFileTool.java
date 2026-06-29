@@ -31,7 +31,7 @@ public class ReadFileTool implements Tool {
     public ToolParameterSchema parameters() {
         return new ToolParameterSchema("object",
             Map.of(
-                "path", new ToolParameterSchema.PropertyDef("string", "文件绝对路径", null, null),
+                "path", new ToolParameterSchema.PropertyDef("string", "文件路径（相对路径将基于工作目录解析）", null, null),
                 "offset", new ToolParameterSchema.PropertyDef("integer", "起始行号(1-based)", null, null),
                 "limit", new ToolParameterSchema.PropertyDef("integer", "最大读取行数", null, null)
             ), List.of("path"));
@@ -45,7 +45,7 @@ public class ReadFileTool implements Tool {
         }
         Path path = Path.of(pathStr);
         if (!path.isAbsolute()) {
-            return ToolResult.error("INVALID_PARAMETER", "路径无效", pathStr);
+            path = Path.of("").toAbsolutePath().resolve(pathStr).normalize();
         }
         if (!Files.exists(path)) {
             return ToolResult.error("FILE_NOT_FOUND", "文件不存在·" + pathStr, pathStr);

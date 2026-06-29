@@ -22,7 +22,7 @@ public class WriteFileTool implements Tool {
     public ToolParameterSchema parameters() {
         return new ToolParameterSchema("object",
             Map.of(
-                "path", new ToolParameterSchema.PropertyDef("string", "文件绝对路径", null, null),
+                "path", new ToolParameterSchema.PropertyDef("string", "文件路径（相对路径将基于工作目录解析）", null, null),
                 "content", new ToolParameterSchema.PropertyDef("string", "要写入的完整内容", null, null)
             ), List.of("path", "content"));
     }
@@ -36,7 +36,7 @@ public class WriteFileTool implements Tool {
         }
         Path path = Path.of(pathStr);
         if (!path.isAbsolute()) {
-            return ToolResult.error("INVALID_PARAMETER", "路径无效", pathStr);
+            path = Path.of("").toAbsolutePath().resolve(pathStr).normalize();
         }
         if (content == null) {
             return ToolResult.error("INVALID_PARAMETER", "内容为空", "content is null");

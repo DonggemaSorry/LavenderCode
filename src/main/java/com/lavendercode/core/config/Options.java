@@ -10,7 +10,7 @@ public record Options(
     String systemPrompt,
 
     @JsonProperty("tool_system_enabled")
-    boolean toolSystemEnabled,
+    Boolean toolSystemEnabled,
 
     @JsonProperty("command_execution_enabled")
     boolean commandExecutionEnabled,
@@ -42,5 +42,16 @@ public record Options(
         if (systemPrompt == null) {
             systemPrompt = "";
         }
+        if (toolSystemEnabled == null) {
+            toolSystemEnabled = true;
+        }
+    }
+
+    /** Returns a copy with a different system prompt. */
+    public Options withSystemPrompt(String newSystemPrompt) {
+        return new Options(maxTokens, newSystemPrompt, toolSystemEnabled,
+            commandExecutionEnabled, commandTimeoutSeconds,
+            fileOperationTimeoutSeconds, readFileMaxLines,
+            commandOutputMaxChars, searchMaxResults);
     }
 }

@@ -12,6 +12,7 @@ public class AgentPromptBuilder {
     private static final String AGENT_PROMPT = """
         You are LavenderCode Agent, a CLI AI programming assistant running inside a terminal.
         You have direct access to the user's local filesystem and shell environment.
+        Current working directory: """ + System.getProperty("user.dir", ".").replace("\\", "/") + """
 
         ## Capabilities
         You are equipped with tools that let you read, write, and edit files,

@@ -22,7 +22,7 @@ public class EditFileTool implements Tool {
     public ToolParameterSchema parameters() {
         return new ToolParameterSchema("object",
             Map.of(
-                "path", new ToolParameterSchema.PropertyDef("string", "文件绝对路径", null, null),
+                "path", new ToolParameterSchema.PropertyDef("string", "文件路径（相对路径将基于工作目录解析）", null, null),
                 "old_string", new ToolParameterSchema.PropertyDef("string", "要替换的原文片段（必须唯一匹配）", null, null),
                 "new_string", new ToolParameterSchema.PropertyDef("string", "替换后的新文片段", null, null)
             ), List.of("path", "old_string", "new_string"));
@@ -39,7 +39,7 @@ public class EditFileTool implements Tool {
         }
         Path path = Path.of(pathStr);
         if (!path.isAbsolute()) {
-            return ToolResult.error("INVALID_PARAMETER", "路径无效", pathStr);
+            path = Path.of("").toAbsolutePath().resolve(pathStr).normalize();
         }
         if (oldStr == null || oldStr.isEmpty()) {
             return ToolResult.error("INVALID_PARAMETER", "old_string 为空", "old_string is null or empty");

@@ -74,10 +74,19 @@ public class OpenAIProvider implements LlmProvider {
             if (!response.isSuccessful()) {
                 int code = response.code();
                 String message = response.message();
+                // Read error body for diagnostics
+                String errorBody = "";
+                try {
+                    var body = response.body();
+                    if (body != null) {
+                        errorBody = body.string();
+                    }
+                } catch (IOException ignored) {
+                }
                 response.close();
                 return new SingleEventIterator(
                     new StreamEvent.StreamError(
-                        "HTTP " + code + ": " + message,
+                        "HTTP " + code + ": " + message + (errorBody.isEmpty() ? "" : " " + errorBody),
                         code
                     )
                 );
@@ -116,10 +125,8 @@ public class OpenAIProvider implements LlmProvider {
             m.put("role", msg.role().name().toLowerCase());
 
             if (msg.role() == Role.ASSISTANT && !msg.toolCalls().isEmpty()) {
-                // Assistant message with tool_calls
-                if (msg.content() != null && !msg.content().isEmpty()) {
-                    m.put("content", msg.content());
-                }
+                // Assistant message with tool_calls — DeepSeek requires content as string (empty string when null)
+                m.put("content", msg.content() != null ? msg.content() : "");
                 List<Map<String, Object>> toolCallsList = new ArrayList<>();
                 for (var tc : msg.toolCalls()) {
                     Map<String, Object> tcObj = new LinkedHashMap<>();
@@ -197,6 +204,7 @@ public class OpenAIProvider implements LlmProvider {
             // Check for finish_reason == "tool_calls" -> emit ToolCallEnd for all accumulators
             JsonNode finishReason = choices.get(0).get("finish_reason");
             if (finishReason != null && "tool_calls".equals(finishReason.asText())) {
+                // DEBUG:("[DEBUG] SSE finish_reason=tool_calls, accum=" + toolAccumulators.size());
                 // Emit all pending tool call ends
                 for (var entry : toolAccumulators.entrySet()) {
                     ToolAccum acc = entry.getValue();
@@ -205,12 +213,17 @@ public class OpenAIProvider implements LlmProvider {
                             acc.jsonBuilder.toString(),
                             new TypeReference<Map<String, Object>>() {}
                         );
+                        // DEBUG:("[DEBUG] ToolCallEnd id=" + acc.toolId + " name=" + acc.toolName + " params=" + params);
                         return new StreamEvent.ToolCallEnd(acc.toolId, acc.toolName, params);
                     } catch (JsonProcessingException e) {
                         return new StreamEvent.ToolCallEnd(acc.toolId, acc.toolName, Map.of());
                     }
                 }
                 return new StreamEvent.StreamComplete();
+            }
+            // Log unexpected finish reasons (potential format mismatch)
+            if (finishReason != null && !"stop".equals(finishReason.asText())) {
+                // DEBUG:("[DEBUG] SSE unexpected finish_reason: " + finishReason.asText());
             }
 
             JsonNode delta = choices.get(0).get("delta");
@@ -230,7 +243,12 @@ public class OpenAIProvider implements LlmProvider {
                     if (nameNode != null && !nameNode.isNull()) {
                         // First appearance with name -> ToolCallStart
                         String toolName = nameNode.asText();
-                        String toolId = "call_" + index;
+                        // Use the actual tool call ID from the API response
+                        JsonNode idNode = tc.get("id");
+                        String toolId = (idNode != null && !idNode.isNull())
+                            ? idNode.asText()
+                            : ("call_" + index);
+                        // DEBUG:("[DEBUG] SSE ToolCallStart idx=" + index + " id=" + toolId + " name=" + toolName);
                         toolAccumulators.put(index, new ToolAccum(toolId, toolName));
                         return new StreamEvent.ToolCallStart(toolId, toolName);
                     }

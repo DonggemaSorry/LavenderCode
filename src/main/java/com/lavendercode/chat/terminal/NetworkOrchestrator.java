@@ -42,6 +42,9 @@ public class NetworkOrchestrator {
     private ToolPhase toolPhase = ToolPhase.IDLE;
     private final List<ToolCall> completedToolCalls = new ArrayList<>();
     private String responseContent = "";
+    private int pendingToolMsgCount = 0; // tool messages in session to rollback on re-injection failure
+    private int reInjectRound = 0;
+    private static final int MAX_REINJECT_ROUNDS = 5;
 
     public NetworkOrchestrator(ChatService chatService, DeltaBuffer deltaBuffer,
                                BlockingQueue<RenderEvent> renderQueue,
@@ -88,6 +91,7 @@ public class NetworkOrchestrator {
         sessionManager.addUserMessage(msg.text());
         completedToolCalls.clear();
         responseContent = "";
+        reInjectRound = 0;
         toolPhase = ToolPhase.STREAMING;
 
         var ctxRef = new AtomicReference<RequestContext>();
@@ -101,15 +105,18 @@ public class NetworkOrchestrator {
         }, 1, 1, TimeUnit.SECONDS);
         this.timerTask = ft;
         try {
+            // Use the full agent prompt (identity + capabilities + rules + user prompt)
+            var agentPrompt = AgentPromptBuilder.build(options.systemPrompt());
+            var promptConfig = new LlmConfig(config.providers(), options.withSystemPrompt(agentPrompt));
             List<ToolDefinition> toolDefs = options.toolSystemEnabled() ? ToolRegistry.export() : List.of();
             if (!toolDefs.isEmpty()) {
                 ctxRef.set(chatService.submit(
-                    provider, sessionManager.getHistory(), config, toolDefs,
+                    provider, sessionManager.getHistory(), promptConfig, toolDefs,
                     delta -> onDeltaReceived(ctxRef.get(), delta)
                 ));
             } else {
                 ctxRef.set(chatService.submit(
-                    provider, sessionManager.getHistory(), config,
+                    provider, sessionManager.getHistory(), promptConfig,
                     delta -> onDeltaReceived(ctxRef.get(), delta)
                 ));
             }
@@ -132,6 +139,8 @@ public class NetworkOrchestrator {
                 if (ctx != null) {
                     chatService.cancel(ctx);
                 }
+                // Rollback tool messages if re-injection hasn't completed
+                rollbackToolMessages();
                 // If in EXECUTING phase, terminate without re-injection
                 if (toolPhase == ToolPhase.EXECUTING) {
                     toolPhase = ToolPhase.IDLE;
@@ -229,6 +238,7 @@ public class NetworkOrchestrator {
             }
             case DeltaEvent.ToolCallEnd tce -> {
                 completedToolCalls.add(tce.toolCall());
+                // logDebug("[DEBUG] Orchestrator ToolCallEnd: name=" + tce.toolCall().name() + " total=" + (completedToolCalls.size() + 1));
                 safePut(new RenderEvent.ToolCallRender(
                     tce.toolCall().id(), tce.toolCall().name(), tce.toolCall().parameters(), "执行中…"));
             }
@@ -237,6 +247,7 @@ public class NetworkOrchestrator {
             case DeltaEvent.Complete() -> {
                 deltaBuffer.forceFlush();
                 if (completedToolCalls.isEmpty()) {
+                    // logDebug("[DEBUG] Orchestrator Complete: NO tool calls, total=" + completedToolCalls.size());
                     // No tool calls — finish normally
                     if (currentRequest.compareAndSet(ctx, null)) {
                         cancelTimer();
@@ -251,6 +262,7 @@ public class NetworkOrchestrator {
                     }
                 } else {
                     // Tool calls detected — switch to EXECUTING phase
+                    // logDebug("[DEBUG] Orchestrator Complete: HAS tool calls, total=" + completedToolCalls.size() + " -> executing");
                     toolPhase = ToolPhase.EXECUTING;
                     executeAllTools(ctx);
                 }
@@ -271,23 +283,45 @@ public class NetworkOrchestrator {
         switch (delta) {
             case DeltaEvent.Content(String t) ->
                 deltaBuffer.append(new DeltaBuffer.BufferedEvent(DeltaBuffer.BufferedEvent.Type.CONTENT_DELTA, t, 0));
-            case DeltaEvent.ToolCallStart tcs -> { /* Silently ignore - single-round closed loop */ }
-            case DeltaEvent.ToolCallDelta tcd -> { /* Silently ignore - single-round closed loop */ }
-            case DeltaEvent.ToolCallEnd tce -> { /* Silently ignore - single-round closed loop */ }
+            case DeltaEvent.ToolCallStart tcs -> {
+                safePut(new RenderEvent.ToolCallRender(tcs.toolCallId(), tcs.toolName(), Map.of(), "准备中…"));
+            }
+            case DeltaEvent.ToolCallDelta tcd -> {
+                // Accumulated by StreamingChatService
+            }
+            case DeltaEvent.ToolCallEnd tce -> {
+                completedToolCalls.add(tce.toolCall());
+                // logDebug("[DEBUG] Orchestrator Final phase ToolCallEnd: name=" + tce.toolCall().name() + " round=" + reInjectRound + " total=" + completedToolCalls.size());
+                safePut(new RenderEvent.ToolCallRender(
+                    tce.toolCall().id(), tce.toolCall().name(), tce.toolCall().parameters(), "执行中…"));
+            }
             case DeltaEvent.Usage(int i, int o) ->
                 safePut(new RenderEvent.StatusUpdate(providerName, modelName, null, i + o));
             case DeltaEvent.Complete() -> {
-                if (currentRequest.compareAndSet(ctx, null)) {
-                    cancelTimer();
-                    deltaBuffer.forceFlush();
-                    long seconds = currentTimer != null ? currentTimer.elapsedSeconds() : 0;
-                    safePut(new RenderEvent.StatusUpdate(
-                        providerName, modelName, "Done (" + seconds + "s)", 0));
-                    safePut(new RenderEvent.FinalizeMessage());
-                    toolPhase = ToolPhase.IDLE;
-                    timerScheduler.schedule(() -> safePut(
-                        new RenderEvent.StatusUpdate(providerName, modelName, "", 0)),
-                        1, TimeUnit.SECONDS);
+                deltaBuffer.forceFlush();
+                if (!completedToolCalls.isEmpty() && reInjectRound < MAX_REINJECT_ROUNDS) {
+                    // More tool calls — execute and re-inject again
+                    // logDebug("[DEBUG] Orchestrator Final Complete: more tool calls round=" + reInjectRound + " total=" + completedToolCalls.size());
+                    toolPhase = ToolPhase.EXECUTING;
+                    executeAllTools(ctx);
+                } else {
+                    // No more tool calls or max rounds reached — finish
+                    if (reInjectRound >= MAX_REINJECT_ROUNDS) {
+                        // logDebug("[DEBUG] Orchestrator Final Complete: max rounds reached");
+                        safePut(new RenderEvent.AddSystemMessage("[Max tool rounds reached]"));
+                    }
+                    if (currentRequest.compareAndSet(ctx, null)) {
+                        cancelTimer();
+                        pendingToolMsgCount = 0; // re-injection succeeded, keep tool messages in history
+                        long seconds = currentTimer != null ? currentTimer.elapsedSeconds() : 0;
+                        safePut(new RenderEvent.StatusUpdate(
+                            providerName, modelName, "Done (" + seconds + "s)", 0));
+                        safePut(new RenderEvent.FinalizeMessage());
+                        toolPhase = ToolPhase.IDLE;
+                        timerScheduler.schedule(() -> safePut(
+                            new RenderEvent.StatusUpdate(providerName, modelName, "", 0)),
+                            1, TimeUnit.SECONDS);
+                    }
                 }
             }
             case DeltaEvent.Error(String m, int c) -> {
@@ -296,6 +330,7 @@ public class NetworkOrchestrator {
                     deltaBuffer.forceFlush();
                     safePut(new RenderEvent.AddSystemMessage("[Error] " + m));
                     safePut(new RenderEvent.FinalizeMessage());
+                    rollbackToolMessages();
                     toolPhase = ToolPhase.IDLE;
                 }
             }
@@ -360,27 +395,43 @@ public class NetworkOrchestrator {
     }
 
     private void reInjectAndContinue(List<ToolResult> results) {
-        // Add tool messages to session history
+        int historySizeBefore = sessionManager.getMessageCount();
+
+        // Add tool messages to session history for the re-injection call
         sessionManager.addToolMessages(completedToolCalls, results);
+        pendingToolMsgCount = sessionManager.getMessageCount() - historySizeBefore;
 
         // Clear accumulated tool calls for next round
         completedToolCalls.clear();
 
+        reInjectRound++;
+        // logDebug("[DEBUG] Orchestrator reInjectAndContinue round=" + reInjectRound);
+
         // Build system prompt with agent instructions
         String systemPrompt = AgentPromptBuilder.build(options.systemPrompt());
+        var overrideConfig = new LlmConfig(config.providers(), options.withSystemPrompt(systemPrompt));
 
         // Send follow-up request with updated history
         toolPhase = ToolPhase.STREAMING_FINAL;
         var ctxRef = new AtomicReference<RequestContext>();
         try {
             List<ToolDefinition> toolDefs = ToolRegistry.export();
-            ctxRef.set(chatService.submit(provider, sessionManager.getHistory(), config, toolDefs,
+            ctxRef.set(chatService.submit(provider, sessionManager.getHistory(), overrideConfig, toolDefs,
                 delta -> onDeltaReceived(ctxRef.get(), delta)));
             currentRequest.set(ctxRef.get());
         } catch (Exception e) {
+            // Rollback tool messages on failure to prevent history corruption
+            rollbackToolMessages();
             toolPhase = ToolPhase.IDLE;
             safePut(new RenderEvent.AddSystemMessage("[Error] " + e.getMessage()));
             safePut(new RenderEvent.FinalizeMessage());
+        }
+    }
+
+    private void rollbackToolMessages() {
+        if (pendingToolMsgCount > 0) {
+            sessionManager.removeLastMessages(pendingToolMsgCount);
+            pendingToolMsgCount = 0;
         }
     }
 
