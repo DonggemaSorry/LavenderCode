@@ -4,6 +4,8 @@
 
 LavenderCode 是一盏栖居在命令行中的 AI 编程之灯——它读你文件里的字句，搜你目录间的行迹，在你敲下每一个回车时，把遥远的语言模型之力，折叠成一行温暖的回复。
 
+等你，在薰衣草盛开的地方。
+
 ---
 
 ## 她是什么
@@ -24,28 +26,23 @@ LavenderCode 是一盏栖居在命令行中的 AI 编程之灯——它读你文
 
 ---
 
-## 如何与她相遇
+## 启动方式
+
+### 准备
+
+需要 **Java 21** 和 **Maven 3.8+**。
 
 ```bash
-# 取一份地图
+# 1. 克隆
+git clone https://github.com/DonggemaSorry/LavenderCode.git
+cd LavenderCode
+
+# 2. 配置
 cp config.yaml.example config.yaml
-# 填入你的密钥
-# ...
-
-# 编译她的身影
-mvn clean package
-
-# 在薰衣草的帷幕升起时，与她对话
-java -jar target/lavendercode-1.0-SNAPSHOT-jar-with-dependencies.jar
+# 编辑 config.yaml，填入你的 API 密钥
 ```
 
-需要的仅是 Java 21 和一颗愿意让 AI 触碰文件的心。
-
----
-
-## 她追随的星光
-
-她能与任何说 OpenAI 语言的神明对话——Claude、DeepSeek、以及所有支持 tools 的 API。
+`config.yaml` 示例：
 
 ```yaml
 providers:
@@ -53,7 +50,56 @@ providers:
     model: deepseek-chat
     base_url: https://api.deepseek.com
     api_key: your-key-here
+
+options:
+  max_tokens: 4096
+  tool_system_enabled: true           # 工具调用开关
+  command_execution_enabled: false    # shell 命令执行（谨慎开启）
+  command_timeout_seconds: 120
+  file_operation_timeout_seconds: 30
+  read_file_max_lines: 2000
+  search_max_results: 200
 ```
+
+### 编译 & 运行
+
+```bash
+# 编译
+mvn clean package
+
+# 方式一：直接运行 fat jar
+java -jar target/lavendercode-1.0-SNAPSHOT-jar-with-dependencies.jar
+
+# 方式二：Maven 启动
+mvn exec:java
+
+# 方式三：指定配置文件
+java -jar target/lavendercode-1.0-SNAPSHOT-jar-with-dependencies.jar --config /path/to/config.yaml
+
+# 跳过开场动画
+java -Dlavendercode.skipSplash=true -jar target/lavendercode-1.0-SNAPSHOT-jar-with-dependencies.jar
+```
+
+### 终端操作
+
+| 操作 | 快捷键 |
+|---|---|
+| 发送消息 | Enter |
+| 换行 | Ctrl+J |
+| 取消当前请求 | Ctrl+C |
+| 退出 | Ctrl+D 或 /exit |
+| 清空对话 | /clear |
+| 查看帮助 | /help |
+
+需要的仅是 Java 21 和一颗愿意让 AI 触碰文件的心。
+
+---
+
+## 她追随的星光
+
+她能与任何说 OpenAI 语言的模型对话——Claude、DeepSeek、以及所有支持 tools 的 API。
+
+支持 Anthropic 的 `system` 字段与 `thinking` 扩展；OpenAI 兼容协议的流式 SSE 解析与 tool_calls 增量累积。
 
 ---
 
