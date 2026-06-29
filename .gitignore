@@ -1,1 +1,22 @@
-nul
+# API key — never commit
+config.yaml
+
+# Maven
+target/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Debug logs
+debug.log
+*.log
