@@ -109,21 +109,23 @@ public class ExecuteCommandTool implements Tool {
     }
 
     private String readStream(InputStream inputStream, int maxChars) throws IOException {
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        byte[] data = new byte[8192];
-        int totalRead = 0;
-        int nRead;
-        while ((nRead = inputStream.read(data, 0, data.length)) != -1) {
-            buffer.write(data, 0, nRead);
-            totalRead += nRead;
-            if (totalRead > maxChars) {
-                break;
+        try (inputStream) {
+            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+            byte[] data = new byte[8192];
+            int totalRead = 0;
+            int nRead;
+            while ((nRead = inputStream.read(data, 0, data.length)) != -1) {
+                buffer.write(data, 0, nRead);
+                totalRead += nRead;
+                if (totalRead > maxChars) {
+                    break;
+                }
             }
+            String result = buffer.toString();
+            if (result.length() > maxChars) {
+                result = result.substring(0, maxChars) + "\n...[truncated]";
+            }
+            return result;
         }
-        String result = buffer.toString();
-        if (result.length() > maxChars) {
-            result = result.substring(0, maxChars) + "\n...[truncated]";
-        }
-        return result;
     }
 }

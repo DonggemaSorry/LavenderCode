@@ -1,7 +1,6 @@
 package com.lavendercode.core.tool;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -47,10 +46,10 @@ public class WriteFileTool implements Tool {
             if (parent != null && !Files.exists(parent)) {
                 Files.createDirectories(parent);
             }
-            byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
             Files.writeString(path, content);
             String fileName = path.getFileName() != null ? path.getFileName().toString() : pathStr;
-            return ToolResult.success("写入 " + bytes.length + " 字节·" + fileName, content);
+            long byteCount = content.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+            return ToolResult.success("写入 " + byteCount + " 字节·" + fileName, content);
         } catch (IOException e) {
             return ToolResult.error("TOOL_ERROR", "写入失败", e.getMessage());
         }

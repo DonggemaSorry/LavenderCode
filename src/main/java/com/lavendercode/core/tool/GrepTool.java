@@ -1,6 +1,7 @@
 package com.lavendercode.core.tool;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -117,11 +118,11 @@ public class GrepTool implements Tool {
     }
 
     private boolean isLikelyBinary(Path path) {
-        try {
-            byte[] bytes = Files.readAllBytes(path);
-            int checkLen = Math.min(bytes.length, 512);
-            for (int i = 0; i < checkLen; i++) {
-                if (bytes[i] == 0) return true;
+        try (InputStream in = Files.newInputStream(path)) {
+            byte[] buf = new byte[512];
+            int n = in.read(buf);
+            for (int i = 0; i < n; i++) {
+                if (buf[i] == 0) return true;
             }
             return false;
         } catch (IOException e) {

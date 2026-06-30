@@ -39,7 +39,7 @@ public class NetworkOrchestrator {
 
     // Tool scheduling state machine
     private enum ToolPhase { IDLE, STREAMING, EXECUTING, REINJECTING, STREAMING_FINAL, DONE }
-    private ToolPhase toolPhase = ToolPhase.IDLE;
+    private volatile ToolPhase toolPhase = ToolPhase.IDLE;
     private final List<ToolCall> completedToolCalls = new ArrayList<>();
     private String responseContent = "";
     private int pendingToolMsgCount = 0; // tool messages in session to rollback on re-injection failure

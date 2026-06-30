@@ -14,6 +14,7 @@ import okhttp3.*;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 public class AnthropicProvider implements LlmProvider {
@@ -84,7 +85,14 @@ public class AnthropicProvider implements LlmProvider {
                 );
             }
 
-            SseEventReader reader = new SseEventReader(response.body().byteStream());
+            var body = response.body();
+            if (body == null) {
+                response.close();
+                return new SingleEventIterator(
+                    new StreamEvent.StreamError("Empty response body", 0)
+                );
+            }
+            SseEventReader reader = new SseEventReader(body.byteStream());
             return new SseStreamEventIterator(reader, response, call, this::parseSseEvent);
 
         } catch (IOException e) {
@@ -175,7 +183,7 @@ public class AnthropicProvider implements LlmProvider {
         }
     }
 
-    private final Map<Integer, ToolAccum> toolAccumulators = new LinkedHashMap<>();
+    private final Map<Integer, ToolAccum> toolAccumulators = new ConcurrentHashMap<>();
 
     StreamEvent parseSseEvent(String sseData) {
         try {
