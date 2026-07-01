@@ -205,6 +205,61 @@ class ReActLoopTest {
         assertThat(roundStarts).containsExactly(1, 2, 3);
     }
 
+    // AC9 + AC10: cancel during tool execution, history stays legal
+    @Test
+    void shouldKeepHistoryLegalAfterCancel_Ac9_Ac10() throws Exception {
+        ToolRegistry.register(new Tool() {
+            @Override public String name() { return "slow_tool"; }
+            @Override public String description() { return "slow"; }
+            @Override public ToolParameterSchema parameters() {
+                return new ToolParameterSchema("object", Map.of(), List.of()); }
+            @Override public ToolResult execute(Map<String, Object> p) {
+                try { Thread.sleep(3000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                return ToolResult.success("slow-ok", "");
+            }
+            @Override public boolean isReadOnly() { return true; }
+        });
+
+        var iter1 = mockIter(
+            new StreamEvent.ToolCallStart("c1", "slow_tool"),
+            new StreamEvent.ToolCallDelta("c1", "{}"),
+            new StreamEvent.ToolCallEnd("c1", "slow_tool", Map.of()),
+            new StreamEvent.StreamComplete());
+        when(provider.streamChat(anyList(), any(), anyList())).thenReturn(iter1);
+
+        var loop = new ReActLoop(provider, session, batchExec, tokens, 10, 3);
+        List<AgentEvent> events = new ArrayList<>();
+
+        // Run in background, cancel after 200ms
+        Thread runThread = new Thread(() -> loop.run("hello", events::add));
+        runThread.start();
+        Thread.sleep(200);
+        loop.cancel();
+        runThread.join(5000);
+
+        // Verify history is legal
+        List<Message> history = session.getHistory();
+        assertHistoryLegal(history);
+        assertThat(events).filteredOn(e -> e instanceof AgentEvent.Stopped).hasSize(1);
+        var stopped = (AgentEvent.Stopped) events.stream().filter(e -> e instanceof AgentEvent.Stopped).findFirst().get();
+        assertThat(stopped.reason()).isEqualTo(AgentEvent.StopReason.USER_CANCELLED);
+    }
+
+    private void assertHistoryLegal(List<Message> history) {
+        for (int i = 0; i < history.size(); i++) {
+            Message msg = history.get(i);
+            if (i > 0) {
+                assertThat(msg.role()).isNotEqualTo(history.get(i - 1).role());
+            }
+            if (!msg.toolCalls().isEmpty()) {
+                int toolCount = msg.toolCalls().size();
+                int following = 0;
+                for (int j = i + 1; j < history.size() && history.get(j).role() == Role.TOOL; j++) following++;
+                assertThat(following).isEqualTo(toolCount);
+            }
+        }
+    }
+
     // Helper tool that always succeeds
     static class SuccessTool implements Tool {
         private final String n;
