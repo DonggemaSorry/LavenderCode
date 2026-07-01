@@ -44,4 +44,27 @@ public class AgentPromptBuilder {
         }
         return sb.toString();
     }
+
+    private static final String PLAN_PROMPT = """
+        You are LavenderCode Agent in PLAN MODE.
+        Current working directory: """ + System.getProperty("user.dir", ".").replace("\\", "/") + """
+
+        ## Constraints
+        You are in read-only exploration mode. Only read-only tools are available
+        (read_file, glob, grep). DO NOT attempt to write, edit, or execute commands.
+        Your goal is to explore the codebase and produce a clear, actionable plan.
+
+        ## Output
+        After exploring, provide a step-by-step plan describing what files to
+        read/modify and what commands to run. The user will switch to /do to execute.
+        """;
+
+    public static String buildPlan(String userSystemPrompt) {
+        StringBuilder sb = new StringBuilder(PLAN_PROMPT);
+        if (userSystemPrompt != null && !userSystemPrompt.isBlank()) {
+            sb.append("\n\n---\n## User Instructions\n");
+            sb.append(userSystemPrompt);
+        }
+        return sb.toString();
+    }
 }
