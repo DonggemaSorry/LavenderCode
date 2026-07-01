@@ -24,7 +24,6 @@ class NetworkOrchestratorTest {
     private DeltaBuffer deltaBuffer;
     private SessionManager sessionManager;
     private LlmProvider provider;
-    private ChatService chatService;
     private NetworkOrchestrator orchestrator;
 
     @BeforeEach
@@ -36,12 +35,11 @@ class NetworkOrchestratorTest {
         sessionManager = new InMemorySessionManager();
         provider = mock(LlmProvider.class);
         when(provider.protocol()).thenReturn("openai-compatible");
-        chatService = mock(ChatService.class);
         LlmConfig config = new LlmConfig(
             List.of(new ProviderConfig("openai-compatible", "openai-compatible", "gpt-4", "http://localhost", "key", null)), null);
 
         orchestrator = new NetworkOrchestrator(
-            chatService, deltaBuffer, renderQueue, inputQueue,
+            deltaBuffer, renderQueue, inputQueue,
             sessionManager, provider, "test-provider", "gpt-4", config,
             scheduler
         );

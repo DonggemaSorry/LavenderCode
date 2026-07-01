@@ -53,7 +53,7 @@ final class TerminalKeyReader {
         if (esc == CsiKeyDecoder.KEY_BRACKETED_PASTE) {
             return new TerminalInput.Paste(readBracketedPasteContent());
         }
-        return new TerminalInput.Character(27);
+        return new TerminalInput.Escape();
     }
 
     static String scrollCommandFor(int key) {

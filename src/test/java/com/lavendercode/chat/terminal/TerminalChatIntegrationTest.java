@@ -33,7 +33,6 @@ class TerminalChatIntegrationTest {
     private DeltaBuffer deltaBuffer;
     private NetworkOrchestrator orchestrator;
     private LlmProvider provider;
-    private ChatService chatService;
     private SessionManager sessionManager;
     private Thread networkThread;
 
@@ -82,15 +81,13 @@ class TerminalChatIntegrationTest {
 
         provider = mock(LlmProvider.class);
         when(provider.protocol()).thenReturn("openai-compatible");
-        when(provider.streamChat(any(), any())).thenAnswer(inv -> blockingIterator());
-
-        chatService = new StreamingChatService();
+        when(provider.streamChat(any(), any(), any())).thenAnswer(inv -> blockingIterator());
 
         LlmConfig config = new LlmConfig(
             List.of(new ProviderConfig("openai-compatible", "openai-compatible", "gpt-4", "http://localhost", "key", null)), null);
 
         orchestrator = new NetworkOrchestrator(
-            chatService, deltaBuffer, renderQueue, inputQueue,
+            deltaBuffer, renderQueue, inputQueue,
             sessionManager, provider, "test-provider", "gpt-4", config,
             scheduler
         );
@@ -101,7 +98,6 @@ class TerminalChatIntegrationTest {
 
     @AfterEach
     void tearDown() {
-        chatService.shutdown();
         networkThread.interrupt();
         scheduler.shutdownNow();
     }

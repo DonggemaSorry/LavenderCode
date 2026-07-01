@@ -15,4 +15,7 @@ sealed interface TerminalInput {
     record Newline() implements TerminalInput {}
 
     record Exit() implements TerminalInput {}
+
+    /** Standalone Esc key press (not part of a CSI/SS3 sequence). */
+    record Escape() implements TerminalInput {}
 }

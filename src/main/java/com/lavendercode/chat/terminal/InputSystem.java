@@ -111,6 +111,9 @@ public class InputSystem {
                     inputQueue.offer(new InputEvent.Shutdown());
                     return null;
                 }
+                case TerminalInput.Escape() -> {
+                    inputQueue.offer(new InputEvent.ExecuteCommand(InputEvent.CommandType.ESC_CANCEL, ""));
+                }
                 case TerminalInput.Character(var code) -> {
                     if (code == 4) {
                         if (buffer.isEmpty()) {
@@ -133,9 +136,6 @@ public class InputSystem {
                             cursor--;
                             publishDraftSync(buffer.toString(), cursor);
                         }
-                        continue;
-                    }
-                    if (code == 27) {
                         continue;
                     }
                     if (code >= 32) {
@@ -190,6 +190,12 @@ public class InputSystem {
         }
         if (line.equals("/cancel")) {
             return new InputEvent.ExecuteCommand(InputEvent.CommandType.CANCEL, "");
+        }
+        if (line.equals("/plan")) {
+            return new InputEvent.ExecuteCommand(InputEvent.CommandType.PLAN, "");
+        }
+        if (line.equals("/do")) {
+            return new InputEvent.ExecuteCommand(InputEvent.CommandType.DO, "");
         }
         return new InputEvent.ExecuteCommand(InputEvent.CommandType.HELP, "");
     }

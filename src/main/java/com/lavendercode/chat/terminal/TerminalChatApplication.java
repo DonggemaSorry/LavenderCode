@@ -45,9 +45,8 @@ public class TerminalChatApplication {
 
         // Components
         DeltaBuffer deltaBuffer = new DeltaBuffer(timerScheduler, renderQueue);
-        ChatService chatService = new StreamingChatService();
         NetworkOrchestrator orchestrator = new NetworkOrchestrator(
-            chatService, deltaBuffer, renderQueue, inputQueue,
+            deltaBuffer, renderQueue, inputQueue,
             sessionManager, provider, providerName, modelName, config,
             timerScheduler
         );
@@ -74,7 +73,7 @@ public class TerminalChatApplication {
         // Wait for render thread to finish (it exits on Shutdown event)
         renderThread.join();
 
-        shutdownWorkers(inputSystem, inputQueue, inputThread, networkThread, timerScheduler, chatService, provider);
+        shutdownWorkers(inputSystem, inputQueue, inputThread, networkThread, timerScheduler, provider);
     }
 
     private static void shutdownWorkers(InputSystem inputSystem,
@@ -82,7 +81,6 @@ public class TerminalChatApplication {
                                         Thread inputThread,
                                         Thread networkThread,
                                         ScheduledExecutorService timerScheduler,
-                                        ChatService chatService,
                                         LlmProvider provider) throws InterruptedException {
         inputSystem.requestShutdown();
         inputQueue.offer(new InputEvent.Shutdown());
@@ -93,7 +91,6 @@ public class TerminalChatApplication {
         inputThread.join(100);
 
         timerScheduler.shutdownNow();
-        chatService.shutdown();
         try {
             provider.close();
         } catch (Exception ignored) {
