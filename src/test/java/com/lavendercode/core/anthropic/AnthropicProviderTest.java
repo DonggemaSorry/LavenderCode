@@ -261,4 +261,49 @@ class AnthropicProviderTest {
         // Should NOT contain a system field when system_prompt is empty
         assertThat(body).doesNotContain("\"system\"");
     }
+
+    @Test
+    void shouldEmitUsageFromMessageDelta() throws Exception {
+        String sseBody =
+            "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"claude-sonnet-4\",\"stop_reason\":null,\"usage\":{\"input_tokens\":25,\"output_tokens\":1}}}\n\n" +
+            "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n" +
+            "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello\"}}\n\n" +
+            "data: {\"type\":\"content_block_stop\",\"index\":0}\n\n" +
+            "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"output_tokens\":15}}\n\n" +
+            "data: {\"type\":\"message_stop\"}\n\n";
+        mockServer.enqueue(new MockResponse()
+            .setBody(sseBody)
+            .setHeader("Content-Type", "text/event-stream"));
+
+        mockServer.start();
+        String baseUrl = mockServer.url("/").toString();
+        baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+
+        LlmConfig config = new LlmConfig(
+            List.of(new ProviderConfig("anthropic", "anthropic", "claude-sonnet-4", baseUrl, "key", new ThinkingConfig(false, 0))),
+            new Options(1024, null)
+        );
+
+        List<Message> history = List.of(new Message(Role.USER, "Hi"));
+
+        StreamEventIterator iterator = provider.streamChat(history, config);
+
+        assertThat(iterator.hasNext()).isTrue();
+        StreamEvent e1 = iterator.next();
+        assertThat(e1).isInstanceOf(StreamEvent.ContentDelta.class);
+        assertThat(((StreamEvent.ContentDelta) e1).text()).isEqualTo("Hello");
+
+        assertThat(iterator.hasNext()).isTrue();
+        StreamEvent e2 = iterator.next();
+        assertThat(e2).isInstanceOf(StreamEvent.Usage.class);
+        assertThat(((StreamEvent.Usage) e2).inputTokens()).isEqualTo(25);
+        assertThat(((StreamEvent.Usage) e2).outputTokens()).isEqualTo(15);
+
+        assertThat(iterator.hasNext()).isTrue();
+        StreamEvent e3 = iterator.next();
+        assertThat(e3).isInstanceOf(StreamEvent.StreamComplete.class);
+
+        assertThat(iterator.hasNext()).isFalse();
+        iterator.close();
+    }
 }

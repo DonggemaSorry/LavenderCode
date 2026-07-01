@@ -164,6 +164,9 @@ public class OpenAIProvider implements LlmProvider {
             body.put("max_tokens", config.options().maxTokens());
         }
 
+        // Request usage info in the final stream chunk
+        body.put("stream_options", Map.of("include_usage", true));
+
         // Add tools if provided
         if (toolDefs != null && !toolDefs.isEmpty()) {
             List<Map<String, Object>> oaiTools = new ArrayList<>();
@@ -206,32 +209,38 @@ public class OpenAIProvider implements LlmProvider {
             JsonNode node = mapper.readTree(sseData);
             JsonNode choices = node.get("choices");
             if (choices == null || choices.isEmpty()) {
+                // Empty choices — check for usage in the final chunk
+                JsonNode usage = node.get("usage");
+                if (usage != null) {
+                    int promptTokens = usage.has("prompt_tokens") ? usage.get("prompt_tokens").asInt() : 0;
+                    int completionTokens = usage.has("completion_tokens") ? usage.get("completion_tokens").asInt() : 0;
+                    return new StreamEvent.Usage(promptTokens, completionTokens);
+                }
                 return null;
             }
 
             // Check for finish_reason == "tool_calls" -> emit ToolCallEnd for all accumulators
             JsonNode finishReason = choices.get(0).get("finish_reason");
             if (finishReason != null && "tool_calls".equals(finishReason.asText())) {
-                // DEBUG:("[DEBUG] SSE finish_reason=tool_calls, accum=" + toolAccumulators.size());
-                // Emit all pending tool call ends
-                for (var entry : toolAccumulators.entrySet()) {
+                // Emit all pending tool call ends (process one per SSE event)
+                var iter = toolAccumulators.entrySet().iterator();
+                if (iter.hasNext()) {
+                    var entry = iter.next();
                     ToolAccum acc = entry.getValue();
+                    iter.remove();
                     try {
                         Map<String, Object> params = mapper.readValue(
                             acc.jsonBuilder.toString(),
                             new TypeReference<Map<String, Object>>() {}
                         );
-                        // DEBUG:("[DEBUG] ToolCallEnd id=" + acc.toolId + " name=" + acc.toolName + " params=" + params);
                         return new StreamEvent.ToolCallEnd(acc.toolId, acc.toolName, params);
                     } catch (JsonProcessingException e) {
                         return new StreamEvent.ToolCallEnd(acc.toolId, acc.toolName, Map.of());
                     }
                 }
-                return new StreamEvent.StreamComplete();
-            }
-            // Log unexpected finish reasons (potential format mismatch)
-            if (finishReason != null && !"stop".equals(finishReason.asText())) {
-                // DEBUG:("[DEBUG] SSE unexpected finish_reason: " + finishReason.asText());
+                // All accumulators processed — don't emit StreamComplete yet,
+                // wait for [DONE] or usage chunk
+                return null;
             }
 
             JsonNode delta = choices.get(0).get("delta");
@@ -275,7 +284,14 @@ public class OpenAIProvider implements LlmProvider {
             }
 
             JsonNode content = delta.get("content");
-            if (content == null || content.isNull()) {
+            if (content == null || content.isNull() || content.asText().isEmpty()) {
+                // Check for usage (DeepSeek sends usage in the final chunk with finish_reason + empty content)
+                JsonNode usage = node.get("usage");
+                if (usage != null && !usage.isNull() && usage.has("prompt_tokens")) {
+                    int promptTokens = usage.get("prompt_tokens").asInt();
+                    int completionTokens = usage.has("completion_tokens") ? usage.get("completion_tokens").asInt() : 0;
+                    return new StreamEvent.Usage(promptTokens, completionTokens);
+                }
                 return null;
             }
 

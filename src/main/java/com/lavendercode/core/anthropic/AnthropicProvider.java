@@ -184,6 +184,7 @@ public class AnthropicProvider implements LlmProvider {
     }
 
     private final Map<Integer, ToolAccum> toolAccumulators = new ConcurrentHashMap<>();
+    private int pendingInputTokens = 0;
 
     StreamEvent parseSseEvent(String sseData) {
         try {
@@ -191,6 +192,24 @@ public class AnthropicProvider implements LlmProvider {
             String type = node.get("type").asText();
 
             return switch (type) {
+                case "message_start" -> {
+                    JsonNode msg = node.get("message");
+                    if (msg != null) {
+                        JsonNode usage = msg.get("usage");
+                        if (usage != null && usage.has("input_tokens")) {
+                            pendingInputTokens = usage.get("input_tokens").asInt();
+                        }
+                    }
+                    yield null;
+                }
+                case "message_delta" -> {
+                    JsonNode usage = node.get("usage");
+                    if (usage != null && usage.has("output_tokens")) {
+                        int outputTokens = usage.get("output_tokens").asInt();
+                        yield new StreamEvent.Usage(pendingInputTokens, outputTokens);
+                    }
+                    yield null;
+                }
                 case "content_block_start" -> {
                     JsonNode contentBlock = node.get("content_block");
                     if (contentBlock != null && "tool_use".equals(contentBlock.get("type").asText())) {
