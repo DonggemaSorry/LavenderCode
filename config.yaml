@@ -9,3 +9,10 @@ providers:
 options:
   max_tokens: 4096
   system_prompt: "You are a helpful AI assistant."
+  tool_system_enabled: true
+  command_execution_enabled: true
+  command_timeout_seconds: 120
+  file_operation_timeout_seconds: 30
+  read_file_max_lines: 2000
+  command_output_max_chars: 30000
+  search_max_results: 200
