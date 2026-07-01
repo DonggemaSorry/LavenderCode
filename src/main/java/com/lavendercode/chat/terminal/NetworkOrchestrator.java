@@ -84,6 +84,7 @@ public class NetworkOrchestrator {
         // Ignore if loop already running
         if (currentLoop != null) return;
 
+        tokenAccumulator.reset();
         deltaBuffer.forceFlush();
         safePut(new RenderEvent.AddUserMessage(msg.text()));
 
@@ -115,8 +116,9 @@ public class NetworkOrchestrator {
                 stopTimer();
                 currentLoop = null;
                 loopThread = null;
+                int finalTokens = tokenAccumulator.getTotalInput() + tokenAccumulator.getTotalOutput();
                 timerScheduler.schedule(() -> safePut(
-                    new RenderEvent.StatusUpdate(providerName, modelName, "", 0)),
+                    new RenderEvent.StatusUpdate(providerName, modelName, "", finalTokens)),
                     1, TimeUnit.SECONDS);
             }
         }, "lavender-react-loop");
@@ -154,8 +156,9 @@ public class NetworkOrchestrator {
                 deltaBuffer.forceFlush();
                 stopTimer();
                 long seconds = currentTimer != null ? currentTimer.elapsedSeconds() : 0;
+                int finalTokens = tokenAccumulator.getTotalInput() + tokenAccumulator.getTotalOutput();
                 safePut(new RenderEvent.StatusUpdate(
-                    providerName, modelName, "Done (" + seconds + "s)", 0));
+                    providerName, modelName, "Done (" + seconds + "s)", finalTokens));
                 safePut(new RenderEvent.FinalizeMessage());
             }
             case AgentEvent.Stopped s -> {
@@ -258,9 +261,10 @@ public class NetworkOrchestrator {
         timer.start();
         this.currentTimer = timer;
         this.timerTask = timerScheduler.scheduleAtFixedRate(() -> {
+            int tokens = tokenAccumulator.getTotalInput() + tokenAccumulator.getTotalOutput();
             safePut(new RenderEvent.StatusUpdate(
                 providerName, modelName,
-                "Imagining\u2026 (" + timer.elapsedSeconds() + "s)", 0));
+                "Imagining\u2026 (" + timer.elapsedSeconds() + "s)", tokens));
         }, 1, 1, TimeUnit.SECONDS);
     }
 

@@ -146,7 +146,7 @@ public class TerminalRenderer {
             case RenderEvent.StatusUpdate(var pn, var mn, var st, int tc) -> {
                 this.providerName = pn;
                 this.modelName = mn;
-                this.statusText = st;
+                if (st != null) this.statusText = st;
                 this.tokenCount = tc;
                 drawStatusBar();
             }
@@ -270,6 +270,9 @@ public class TerminalRenderer {
         if (mid.length() > colW - 2) mid = mid.substring(0, colW - 2);
 
         String right = modelName;
+        if (tokenCount > 0) {
+            right = modelName + " \u00b7 " + tokenCount + " tok";
+        }
         if (right.length() > colW - 1) right = right.substring(0, colW - 1);
 
         // Center mid within its column
