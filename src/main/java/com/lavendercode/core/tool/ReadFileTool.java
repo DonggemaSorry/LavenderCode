@@ -38,6 +38,9 @@ public class ReadFileTool implements Tool {
     }
 
     @Override
+    public boolean isReadOnly() { return true; }
+
+    @Override
     public ToolResult execute(Map<String, Object> params) {
         String pathStr = (String) params.get("path");
         if (pathStr == null || pathStr.isBlank()) {

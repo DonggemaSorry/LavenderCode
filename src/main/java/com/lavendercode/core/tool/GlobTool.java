@@ -37,6 +37,9 @@ public class GlobTool implements Tool {
     }
 
     @Override
+    public boolean isReadOnly() { return true; }
+
+    @Override
     public ToolResult execute(Map<String, Object> params) {
         String pattern = (String) params.get("pattern");
         if (pattern == null || pattern.isBlank()) {

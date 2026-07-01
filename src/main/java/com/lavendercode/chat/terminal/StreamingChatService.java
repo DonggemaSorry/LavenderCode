@@ -137,6 +137,7 @@ public class StreamingChatService implements ChatService {
             }
             case StreamEvent.StreamComplete sc -> null;
             case StreamEvent.StreamError err  -> new DeltaEvent.Error(err.message(), err.statusCode());
+            case StreamEvent.Usage u -> new DeltaEvent.Usage(u.inputTokens(), u.outputTokens());
         };
     }
 }

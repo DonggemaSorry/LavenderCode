@@ -41,6 +41,14 @@ public class ToolRegistry {
         return defs;
     }
 
+    public static List<ToolDefinition> exportReadOnly() {
+        List<ToolDefinition> defs = new ArrayList<>();
+        for (Tool tool : tools.values()) {
+            if (tool.isReadOnly()) defs.add(toDefinition(tool));
+        }
+        return defs;
+    }
+
     private static ToolDefinition toDefinition(Tool tool) {
         ToolParameterSchema schema = tool.parameters();
         Map<String, Object> params = new LinkedHashMap<>();

@@ -9,7 +9,8 @@ public sealed interface StreamEvent
             StreamEvent.ToolCallDelta,
             StreamEvent.ToolCallEnd,
             StreamEvent.StreamComplete,
-            StreamEvent.StreamError {
+            StreamEvent.StreamError,
+            StreamEvent.Usage {
 
     record ContentDelta(String text) implements StreamEvent {}
     record ThinkingDelta(String text) implements StreamEvent {}
@@ -18,4 +19,5 @@ public sealed interface StreamEvent
     record ToolCallEnd(String toolCallId, String toolName, Map<String, Object> parameters) implements StreamEvent {}
     record StreamComplete() implements StreamEvent {}
     record StreamError(String message, int statusCode) implements StreamEvent {}
+    record Usage(int inputTokens, int outputTokens) implements StreamEvent {}
 }
