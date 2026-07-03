@@ -17,7 +17,6 @@ class PlanModeManagerTest {
         mgr.enterPlanMode();
         var defs = mgr.getToolDefinitions();
         assertThat(defs).hasSize(1).extracting(ToolDefinition::name).contains("ro");
-        assertThat(mgr.getSystemPrompt("")).contains("PLAN MODE");
     }
 
     @Test
@@ -29,7 +28,6 @@ class PlanModeManagerTest {
         mgr.exitToDo();
         var defs = mgr.getToolDefinitions();
         assertThat(defs).hasSize(2);
-        assertThat(mgr.getSystemPrompt("")).doesNotContain("PLAN MODE");
     }
 
     @Test

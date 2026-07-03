@@ -6,6 +6,9 @@ import com.lavendercode.core.config.Options;
 import com.lavendercode.core.provider.LlmProvider;
 import com.lavendercode.core.tool.ToolDefinition;
 import com.lavendercode.core.tool.ToolResult;
+import com.lavendercode.core.prompt.SystemPromptAssembler;
+import com.lavendercode.core.prompt.EnvironmentInfoCollector;
+import com.lavendercode.core.prompt.ToolDescriptionEnhancer;
 
 import java.util.List;
 import java.util.Map;
@@ -15,6 +18,8 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 public class NetworkOrchestrator {
+
+    private static final String APP_VERSION = "1.0.0";
 
     private final DeltaBuffer deltaBuffer;
     private final BlockingQueue<RenderEvent> renderQueue;
@@ -88,15 +93,16 @@ public class NetworkOrchestrator {
         deltaBuffer.forceFlush();
         safePut(new RenderEvent.AddUserMessage(msg.text()));
 
-        // Build system prompt based on mode
-        String systemPrompt = planMode.getSystemPrompt(options.systemPrompt());
-        var promptConfig = new LlmConfig(config.providers(), options.withSystemPrompt(systemPrompt));
+        // ch05: build stable prompt + environment info + enhanced tool defs
+        String stablePrompt = SystemPromptAssembler.assemble(options.systemPrompt());
+        String envInfo = EnvironmentInfoCollector.collect(modelName, APP_VERSION);
         List<ToolDefinition> toolDefs = options.toolSystemEnabled()
-            ? planMode.getToolDefinitions() : List.of();
+            ? ToolDescriptionEnhancer.enhance(planMode.getToolDefinitions())
+            : List.of();
 
         // Create and configure loop
         var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3);
-        loop.setConfig(promptConfig, toolDefs);
+        loop.setConfig(config, toolDefs, stablePrompt, envInfo, planMode);
         currentLoop = loop;
 
         // Start timer

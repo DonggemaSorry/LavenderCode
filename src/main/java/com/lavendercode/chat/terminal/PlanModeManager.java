@@ -16,9 +16,4 @@ public class PlanModeManager {
         return mode == Mode.PLAN ? ToolRegistry.exportReadOnly() : ToolRegistry.export();
     }
 
-    public String getSystemPrompt(String userPrompt) {
-        return mode == Mode.PLAN
-            ? AgentPromptBuilder.buildPlan(userPrompt)
-            : AgentPromptBuilder.build(userPrompt);
-    }
 }
