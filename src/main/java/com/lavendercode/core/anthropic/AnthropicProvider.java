@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lavendercode.core.config.LlmConfig;
 import com.lavendercode.core.config.ProviderConfig;
+import com.lavendercode.core.prompt.PromptContext;
 import com.lavendercode.core.provider.*;
 import com.lavendercode.core.sse.SseEventReader;
 import com.lavendercode.core.sse.SseStreamEventIterator;
@@ -49,6 +50,66 @@ public class AnthropicProvider implements LlmProvider {
     @Override
     public StreamEventIterator streamChat(List<Message> history, LlmConfig config, List<ToolDefinition> toolDefs) {
         return doStreamChat(history, config, toolDefs);
+    }
+
+    @Override
+    public StreamEventIterator streamChat(List<Message> history, LlmConfig config,
+                                           List<ToolDefinition> toolDefs,
+                                           PromptContext promptContext) {
+        return doStreamChatWithCtx(history, config, toolDefs, promptContext);
+    }
+
+    private StreamEventIterator doStreamChatWithCtx(List<Message> history, LlmConfig config,
+                                                    List<ToolDefinition> toolDefs,
+                                                    PromptContext promptContext) {
+        ProviderConfig pc = config.providers().get(0);
+        String baseUrl = pc.baseUrl();
+        if (baseUrl == null) {
+            baseUrl = "https://api.anthropic.com";
+        }
+        if (baseUrl.endsWith("/")) {
+            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+        }
+        String endpoint = baseUrl + "/v1/messages";
+        String requestBody = buildRequestBody(history, config, toolDefs, promptContext);
+
+        Request request = new Request.Builder()
+            .url(endpoint)
+            .post(RequestBody.create(requestBody, MediaType.parse("application/json")))
+            .header("x-api-key", pc.apiKey())
+            .header("anthropic-version", "2023-06-01")
+            .build();
+
+        Call call = httpClient.newCall(request);
+        try {
+            Response response = call.execute();
+            if (!response.isSuccessful()) {
+                int code = response.code();
+                String message = response.message();
+                response.close();
+                return new SingleEventIterator(
+                    new StreamEvent.StreamError(
+                        "HTTP " + code + ": " + message,
+                        code
+                    )
+                );
+            }
+
+            var body = response.body();
+            if (body == null) {
+                response.close();
+                return new SingleEventIterator(
+                    new StreamEvent.StreamError("Empty response body", 0)
+                );
+            }
+            SseEventReader reader = new SseEventReader(body.byteStream());
+            return new SseStreamEventIterator(reader, response, call, this::parseSseEvent);
+
+        } catch (IOException e) {
+            return new SingleEventIterator(
+                new StreamEvent.StreamError("Connection error: " + e.getMessage(), 0)
+            );
+        }
     }
 
     private StreamEventIterator doStreamChat(List<Message> history, LlmConfig config, List<ToolDefinition> toolDefs) {
@@ -115,40 +176,7 @@ public class AnthropicProvider implements LlmProvider {
 
         List<Map<String, Object>> messages = new ArrayList<>();
         for (Message msg : history) {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("role", msg.role().name().toLowerCase());
-
-            if (msg.role() == Role.ASSISTANT && !msg.toolCalls().isEmpty()) {
-                // Assistant message with tool_use
-                List<Map<String, Object>> contentBlocks = new ArrayList<>();
-                if (msg.content() != null && !msg.content().isEmpty()) {
-                    contentBlocks.add(Map.of("type", "text", "text", msg.content()));
-                }
-                for (var tc : msg.toolCalls()) {
-                    Map<String, Object> toolUse = new LinkedHashMap<>();
-                    toolUse.put("type", "tool_use");
-                    toolUse.put("id", tc.id());
-                    toolUse.put("name", tc.name());
-                    toolUse.put("input", tc.parameters());
-                    contentBlocks.add(toolUse);
-                }
-                m.put("content", contentBlocks);
-            } else if (msg.role() == Role.TOOL && !msg.toolResults().isEmpty()) {
-                // Tool result as user message with tool_result blocks
-                m.put("role", "user");
-                List<Map<String, Object>> contentBlocks = new ArrayList<>();
-                for (var tr : msg.toolResults()) {
-                    Map<String, Object> toolResult = new LinkedHashMap<>();
-                    toolResult.put("type", "tool_result");
-                    toolResult.put("tool_use_id", msg.toolCallId());
-                    toolResult.put("content", tr.content() != null ? tr.content() : tr.summary());
-                    contentBlocks.add(toolResult);
-                }
-                m.put("content", contentBlocks);
-            } else {
-                m.put("content", msg.content());
-            }
-            messages.add(m);
+            messages.add(buildAnthropicMessage(msg));
         }
         body.put("messages", messages);
 
@@ -183,8 +211,101 @@ public class AnthropicProvider implements LlmProvider {
         }
     }
 
+    String buildRequestBody(List<Message> history, LlmConfig config,
+                           List<ToolDefinition> toolDefs, PromptContext promptContext) {
+        ProviderConfig pc = config.providers().get(0);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("model", pc.model());
+        body.put("max_tokens", config.options().maxTokens());
+        body.put("stream", true);
+
+        // system as content block array with cache_control
+        List<Map<String, Object>> systemBlocks = new ArrayList<>();
+        Map<String, Object> stableBlock = new LinkedHashMap<>();
+        stableBlock.put("type", "text");
+        stableBlock.put("text", promptContext.stablePrompt());
+        stableBlock.put("cache_control", Map.of("type", "ephemeral"));
+        systemBlocks.add(stableBlock);
+        Map<String, Object> envBlock = new LinkedHashMap<>();
+        envBlock.put("type", "text");
+        envBlock.put("text", promptContext.environmentInfo());
+        systemBlocks.add(envBlock);
+        body.put("system", systemBlocks);
+
+        // messages: history + reminders
+        List<Map<String, Object>> messages = new ArrayList<>();
+        for (Message msg : history) {
+            messages.add(buildAnthropicMessage(msg));
+        }
+        for (String reminder : promptContext.reminders()) {
+            Map<String, Object> r = new LinkedHashMap<>();
+            r.put("role", "user");
+            r.put("content", reminder);
+            messages.add(r);
+        }
+        body.put("messages", messages);
+
+        // tools with cache_control on last
+        if (toolDefs != null && !toolDefs.isEmpty()) {
+            List<Map<String, Object>> tools = new ArrayList<>();
+            for (int i = 0; i < toolDefs.size(); i++) {
+                ToolDefinition td = toolDefs.get(i);
+                Map<String, Object> t = new LinkedHashMap<>();
+                t.put("name", td.name());
+                t.put("description", td.description());
+                t.put("input_schema", td.parameters());
+                if (i == toolDefs.size() - 1) t.put("cache_control", Map.of("type", "ephemeral"));
+                tools.add(t);
+            }
+            body.put("tools", tools);
+        }
+        if (pc.thinking() != null && pc.thinking().enabled()) {
+            Map<String, Object> thinking = new LinkedHashMap<>();
+            thinking.put("type", "enabled");
+            thinking.put("budget_tokens", pc.thinking().budgetTokens());
+            body.put("thinking", thinking);
+        }
+        try { return mapper.writeValueAsString(body); }
+        catch (JsonProcessingException e) { throw new RuntimeException("Failed to build request body", e); }
+    }
+
+    private Map<String, Object> buildAnthropicMessage(Message msg) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("role", msg.role().name().toLowerCase());
+        if (msg.role() == Role.ASSISTANT && !msg.toolCalls().isEmpty()) {
+            List<Map<String, Object>> contentBlocks = new ArrayList<>();
+            if (msg.content() != null && !msg.content().isEmpty())
+                contentBlocks.add(Map.of("type", "text", "text", msg.content()));
+            for (var tc : msg.toolCalls()) {
+                Map<String, Object> toolUse = new LinkedHashMap<>();
+                toolUse.put("type", "tool_use");
+                toolUse.put("id", tc.id());
+                toolUse.put("name", tc.name());
+                toolUse.put("input", tc.parameters());
+                contentBlocks.add(toolUse);
+            }
+            m.put("content", contentBlocks);
+        } else if (msg.role() == Role.TOOL && !msg.toolResults().isEmpty()) {
+            m.put("role", "user");
+            List<Map<String, Object>> contentBlocks = new ArrayList<>();
+            for (var tr : msg.toolResults()) {
+                Map<String, Object> toolResult = new LinkedHashMap<>();
+                toolResult.put("type", "tool_result");
+                toolResult.put("tool_use_id", msg.toolCallId());
+                toolResult.put("content", tr.content() != null ? tr.content() : tr.summary());
+                contentBlocks.add(toolResult);
+            }
+            m.put("content", contentBlocks);
+        } else {
+            m.put("content", msg.content());
+        }
+        return m;
+    }
+
     private final Map<Integer, ToolAccum> toolAccumulators = new ConcurrentHashMap<>();
     private int pendingInputTokens = 0;
+    private int pendingCacheCreation = 0;
+    private int pendingCacheRead = 0;
 
     StreamEvent parseSseEvent(String sseData) {
         try {
@@ -196,8 +317,10 @@ public class AnthropicProvider implements LlmProvider {
                     JsonNode msg = node.get("message");
                     if (msg != null) {
                         JsonNode usage = msg.get("usage");
-                        if (usage != null && usage.has("input_tokens")) {
-                            pendingInputTokens = usage.get("input_tokens").asInt();
+                        if (usage != null) {
+                            pendingInputTokens = usage.path("input_tokens").asInt(0);
+                            pendingCacheCreation = usage.path("cache_creation_input_tokens").asInt(0);
+                            pendingCacheRead = usage.path("cache_read_input_tokens").asInt(0);
                         }
                     }
                     yield null;
@@ -206,7 +329,8 @@ public class AnthropicProvider implements LlmProvider {
                     JsonNode usage = node.get("usage");
                     if (usage != null && usage.has("output_tokens")) {
                         int outputTokens = usage.get("output_tokens").asInt();
-                        yield new StreamEvent.Usage(pendingInputTokens, outputTokens);
+                        yield new StreamEvent.Usage(pendingInputTokens, outputTokens,
+                            pendingCacheCreation, pendingCacheRead);
                     }
                     yield null;
                 }
