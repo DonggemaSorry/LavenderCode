@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lavendercode.core.config.LlmConfig;
 import com.lavendercode.core.config.ProviderConfig;
+import com.lavendercode.core.prompt.PromptContext;
 import com.lavendercode.core.provider.*;
 import com.lavendercode.core.sse.SseEventReader;
 import com.lavendercode.core.sse.SseStreamEventIterator;
@@ -49,6 +50,73 @@ public class OpenAIProvider implements LlmProvider {
     @Override
     public StreamEventIterator streamChat(List<Message> history, LlmConfig config, List<ToolDefinition> toolDefs) {
         return doStreamChat(history, config, toolDefs);
+    }
+
+    @Override
+    public StreamEventIterator streamChat(List<Message> history, LlmConfig config,
+                                           List<ToolDefinition> toolDefs,
+                                           PromptContext promptContext) {
+        return doStreamChatWithCtx(history, config, toolDefs, promptContext);
+    }
+
+    private StreamEventIterator doStreamChatWithCtx(List<Message> history, LlmConfig config,
+                                                    List<ToolDefinition> toolDefs,
+                                                    PromptContext promptContext) {
+        ProviderConfig pc = config.providers().get(0);
+        String baseUrl = pc.baseUrl();
+        if (baseUrl == null) {
+            baseUrl = "https://api.openai.com";
+        }
+        if (baseUrl.endsWith("/")) {
+            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+        }
+        String endpoint = baseUrl + "/v1/chat/completions";
+        String requestBody = buildRequestBody(history, config, toolDefs, promptContext);
+
+        Request request = new Request.Builder()
+            .url(endpoint)
+            .post(RequestBody.create(requestBody, MediaType.parse("application/json")))
+            .header("Authorization", "Bearer " + pc.apiKey())
+            .build();
+
+        Call call = httpClient.newCall(request);
+        try {
+            Response response = call.execute();
+            if (!response.isSuccessful()) {
+                int code = response.code();
+                String message = response.message();
+                String errorBody = "";
+                try {
+                    var body = response.body();
+                    if (body != null) {
+                        errorBody = body.string();
+                    }
+                } catch (IOException ignored) {
+                }
+                response.close();
+                return new SingleEventIterator(
+                    new StreamEvent.StreamError(
+                        "HTTP " + code + ": " + message + (errorBody.isEmpty() ? "" : " " + errorBody),
+                        code
+                    )
+                );
+            }
+
+            var body = response.body();
+            if (body == null) {
+                response.close();
+                return new SingleEventIterator(
+                    new StreamEvent.StreamError("Empty response body", 0)
+                );
+            }
+            SseEventReader reader = new SseEventReader(body.byteStream());
+            return new SseStreamEventIterator(reader, response, call, this::parseSseEvent);
+
+        } catch (IOException e) {
+            return new SingleEventIterator(
+                new StreamEvent.StreamError("Connection error: " + e.getMessage(), 0)
+            );
+        }
     }
 
     private StreamEventIterator doStreamChat(List<Message> history, LlmConfig config, List<ToolDefinition> toolDefs) {
@@ -128,36 +196,7 @@ public class OpenAIProvider implements LlmProvider {
             messages.add(systemMsg);
         }
 
-        for (Message msg : history) {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("role", msg.role().name().toLowerCase());
-
-            if (msg.role() == Role.ASSISTANT && !msg.toolCalls().isEmpty()) {
-                // Assistant message with tool_calls — DeepSeek requires content as string (empty string when null)
-                m.put("content", msg.content() != null ? msg.content() : "");
-                List<Map<String, Object>> toolCallsList = new ArrayList<>();
-                for (var tc : msg.toolCalls()) {
-                    Map<String, Object> tcObj = new LinkedHashMap<>();
-                    tcObj.put("id", tc.id());
-                    tcObj.put("type", "function");
-                    Map<String, Object> func = new LinkedHashMap<>();
-                    func.put("name", tc.name());
-                    func.put("arguments", toJsonString(tc.parameters()));
-                    tcObj.put("function", func);
-                    toolCallsList.add(tcObj);
-                }
-                m.put("tool_calls", toolCallsList);
-            } else if (msg.role() == Role.TOOL && !msg.toolResults().isEmpty()) {
-                // Tool message
-                m.put("role", "tool");
-                m.put("tool_call_id", msg.toolCallId());
-                var tr = msg.toolResults().get(0);
-                m.put("content", tr.content() != null ? tr.content() : tr.summary());
-            } else {
-                m.put("content", msg.content());
-            }
-            messages.add(m);
-        }
+        for (Message msg : history) { messages.add(buildOpenAIMessage(msg)); }
         body.put("messages", messages);
 
         if (config.options().maxTokens() > 0) {
@@ -190,6 +229,75 @@ public class OpenAIProvider implements LlmProvider {
         }
     }
 
+    String buildRequestBody(List<Message> history, LlmConfig config,
+                           List<ToolDefinition> toolDefs, PromptContext promptContext) {
+        ProviderConfig pc = config.providers().get(0);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("model", pc.model());
+        body.put("stream", true);
+        List<Map<String, Object>> messages = new ArrayList<>();
+        if (promptContext != null) {
+            Map<String, Object> stableSys = new LinkedHashMap<>();
+            stableSys.put("role", "system");
+            stableSys.put("content", promptContext.stablePrompt());
+            messages.add(stableSys);
+            Map<String, Object> envSys = new LinkedHashMap<>();
+            envSys.put("role", "system");
+            envSys.put("content", promptContext.environmentInfo());
+            messages.add(envSys);
+        }
+        for (Message msg : history) { messages.add(buildOpenAIMessage(msg)); }
+        if (promptContext != null) {
+            for (String reminder : promptContext.reminders()) {
+                Map<String, Object> r = new LinkedHashMap<>();
+                r.put("role", "user");
+                r.put("content", reminder);
+                messages.add(r);
+            }
+        }
+        body.put("messages", messages);
+        if (config.options().maxTokens() > 0) body.put("max_tokens", config.options().maxTokens());
+        body.put("stream_options", Map.of("include_usage", true));
+        if (toolDefs != null && !toolDefs.isEmpty()) {
+            List<Map<String, Object>> oaiTools = new ArrayList<>();
+            for (ToolDefinition td : toolDefs) {
+                Map<String, Object> t = new LinkedHashMap<>();
+                t.put("type", "function");
+                Map<String, Object> f = new LinkedHashMap<>();
+                f.put("name", td.name()); f.put("description", td.description());
+                f.put("parameters", td.parameters());
+                t.put("function", f); oaiTools.add(t);
+            }
+            body.put("tools", oaiTools);
+        }
+        try { return mapper.writeValueAsString(body); }
+        catch (JsonProcessingException e) { throw new RuntimeException("Failed to build request body", e); }
+    }
+
+    private Map<String, Object> buildOpenAIMessage(Message msg) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("role", msg.role().name().toLowerCase());
+        if (msg.role() == Role.ASSISTANT && !msg.toolCalls().isEmpty()) {
+            m.put("content", msg.content() != null ? msg.content() : "");
+            List<Map<String, Object>> toolCallsList = new ArrayList<>();
+            for (var tc : msg.toolCalls()) {
+                Map<String, Object> tcObj = new LinkedHashMap<>();
+                tcObj.put("id", tc.id()); tcObj.put("type", "function");
+                Map<String, Object> func = new LinkedHashMap<>();
+                func.put("name", tc.name()); func.put("arguments", toJsonString(tc.parameters()));
+                tcObj.put("function", func); toolCallsList.add(tcObj);
+            }
+            m.put("tool_calls", toolCallsList);
+        } else if (msg.role() == Role.TOOL && !msg.toolResults().isEmpty()) {
+            m.put("role", "tool"); m.put("tool_call_id", msg.toolCallId());
+            var tr = msg.toolResults().get(0);
+            m.put("content", tr.content() != null ? tr.content() : tr.summary());
+        } else {
+            m.put("content", msg.content());
+        }
+        return m;
+    }
+
     private String toJsonString(Map<String, Object> params) {
         try {
             return mapper.writeValueAsString(params);
@@ -211,10 +319,13 @@ public class OpenAIProvider implements LlmProvider {
             if (choices == null || choices.isEmpty()) {
                 // Empty choices — check for usage in the final chunk
                 JsonNode usage = node.get("usage");
-                if (usage != null) {
-                    int promptTokens = usage.has("prompt_tokens") ? usage.get("prompt_tokens").asInt() : 0;
+                if (usage != null && !usage.isNull() && usage.has("prompt_tokens")) {
+                    int promptTokens = usage.get("prompt_tokens").asInt();
                     int completionTokens = usage.has("completion_tokens") ? usage.get("completion_tokens").asInt() : 0;
-                    return new StreamEvent.Usage(promptTokens, completionTokens);
+                    int cachedTokens = 0;
+                    JsonNode details = usage.get("prompt_tokens_details");
+                    if (details != null) cachedTokens = details.path("cached_tokens").asInt(0);
+                    return new StreamEvent.Usage(promptTokens, completionTokens, 0, cachedTokens);
                 }
                 return null;
             }
@@ -290,7 +401,10 @@ public class OpenAIProvider implements LlmProvider {
                 if (usage != null && !usage.isNull() && usage.has("prompt_tokens")) {
                     int promptTokens = usage.get("prompt_tokens").asInt();
                     int completionTokens = usage.has("completion_tokens") ? usage.get("completion_tokens").asInt() : 0;
-                    return new StreamEvent.Usage(promptTokens, completionTokens);
+                    int cachedTokens = 0;
+                    JsonNode details = usage.get("prompt_tokens_details");
+                    if (details != null) cachedTokens = details.path("cached_tokens").asInt(0);
+                    return new StreamEvent.Usage(promptTokens, completionTokens, 0, cachedTokens);
                 }
                 return null;
             }
