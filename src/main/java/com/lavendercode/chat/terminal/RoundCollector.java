@@ -15,6 +15,7 @@ public class RoundCollector {
     private final ToolCallAccumulator accumulator = new ToolCallAccumulator();
     private final List<ToolCall> completedCalls = new ArrayList<>();
     private int inputTokens = 0, outputTokens = 0;
+    private int cacheCreationTokens = 0, cacheReadTokens = 0;
     private String error = null;
 
     public RoundCollector(Consumer<AgentEvent> sink) {
@@ -45,6 +46,8 @@ public class RoundCollector {
                 case StreamEvent.Usage u -> {
                     inputTokens = u.inputTokens();
                     outputTokens = u.outputTokens();
+                    cacheCreationTokens = u.cacheCreationTokens();
+                    cacheReadTokens = u.cacheReadTokens();
                 }
                 case StreamEvent.StreamError err -> {
                     error = err.message();
@@ -67,6 +70,7 @@ public class RoundCollector {
             iter.close();
         }
         return new RoundResult(fullText.toString(), List.copyOf(completedCalls),
-                               inputTokens, outputTokens, error);
+                               inputTokens, outputTokens,
+                               cacheCreationTokens, cacheReadTokens, error);
     }
 }

@@ -1,6 +1,7 @@
 package com.lavendercode.core.provider;
 
 import com.lavendercode.core.config.LlmConfig;
+import com.lavendercode.core.prompt.PromptContext;
 import com.lavendercode.core.tool.ToolDefinition;
 
 import java.util.List;
@@ -17,6 +18,12 @@ public interface LlmProvider extends AutoCloseable {
     default StreamEventIterator streamChat(List<Message> history, LlmConfig config,
                                            List<ToolDefinition> toolDefs) {
         return streamChat(history, config);
+    }
+
+    default StreamEventIterator streamChat(List<Message> history, LlmConfig config,
+                                           List<ToolDefinition> toolDefs,
+                                           PromptContext promptContext) {
+        return streamChat(history, config, toolDefs);
     }
 
     @Override
