@@ -19,5 +19,10 @@ public sealed interface StreamEvent
     record ToolCallEnd(String toolCallId, String toolName, Map<String, Object> parameters) implements StreamEvent {}
     record StreamComplete() implements StreamEvent {}
     record StreamError(String message, int statusCode) implements StreamEvent {}
-    record Usage(int inputTokens, int outputTokens) implements StreamEvent {}
+    record Usage(int inputTokens, int outputTokens,
+                 int cacheCreationTokens, int cacheReadTokens) implements StreamEvent {
+        public Usage(int inputTokens, int outputTokens) {
+            this(inputTokens, outputTokens, 0, 0);
+        }
+    }
 }
