@@ -2,11 +2,15 @@ package com.lavendercode.chat.terminal;
 
 import com.lavendercode.chat.session.SessionManager;
 import com.lavendercode.core.config.LlmConfig;
+import com.lavendercode.core.prompt.PromptContext;
+import com.lavendercode.core.prompt.ReminderInjector;
 import com.lavendercode.core.provider.*;
 import com.lavendercode.core.tool.*;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.logging.Logger;
 
 public class ReActLoop {
     private final LlmProvider provider;
@@ -16,8 +20,12 @@ public class ReActLoop {
     private final int maxIterations;
     private final int maxUnknownRounds;
     private final AtomicBoolean cancelFlag = new AtomicBoolean(false);
+    private static final Logger logger = Logger.getLogger(ReActLoop.class.getName());
     private List<ToolDefinition> toolDefs = List.of();
     private LlmConfig config = null;
+    private String stablePrompt;
+    private String environmentInfo;
+    private PlanModeManager planMode;
 
     public ReActLoop(LlmProvider provider, SessionManager sessionManager,
                      BatchingToolExecutor batchExecutor, TokenAccumulator tokenAccumulator,
@@ -35,6 +43,16 @@ public class ReActLoop {
         this.toolDefs = toolDefs != null ? toolDefs : List.of();
     }
 
+    public void setConfig(LlmConfig config, List<ToolDefinition> toolDefs,
+                          String stablePrompt, String environmentInfo,
+                          PlanModeManager planMode) {
+        this.config = config;
+        this.toolDefs = toolDefs != null ? toolDefs : List.of();
+        this.stablePrompt = stablePrompt;
+        this.environmentInfo = environmentInfo;
+        this.planMode = planMode;
+    }
+
     public void cancel() { cancelFlag.set(true); }
 
     public void run(String userMessage, Consumer<AgentEvent> sink) {
@@ -47,10 +65,27 @@ public class ReActLoop {
             iteration++;
             sink.accept(new AgentEvent.RoundStart(iteration));
 
+            // ch05: build PromptContext per round
+            PromptContext promptCtx = null;
+            if (stablePrompt != null) {
+                Optional<String> reminder = ReminderInjector.inject(
+                    iteration, planMode != null && planMode.isPlanMode());
+                promptCtx = new PromptContext(stablePrompt, environmentInfo,
+                    reminder.map(List::of).orElse(List.of()));
+            }
+
             // 1. Stream collect
-            StreamEventIterator iter = provider.streamChat(sessionManager.getHistory(), config, toolDefs);
+            StreamEventIterator iter = (promptCtx != null)
+                ? provider.streamChat(sessionManager.getHistory(), config, toolDefs, promptCtx)
+                : provider.streamChat(sessionManager.getHistory(), config, toolDefs);
             RoundCollector collector = new RoundCollector(sink);
             RoundResult result = collector.consume(iter, cancelFlag);
+
+            // ch05: cache hit info to debug log only
+            if (result.cacheReadTokens() > 0 || result.cacheCreationTokens() > 0) {
+                logger.fine("Round " + iteration + " cache: creation="
+                    + result.cacheCreationTokens() + " read=" + result.cacheReadTokens());
+            }
 
             // 2. Stream error
             if (result.hasError()) {
