@@ -1,6 +1,8 @@
 package com.lavendercode.core.prompt;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import java.nio.file.Path;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class EnvironmentInfoCollectorTest {
@@ -45,5 +47,19 @@ class EnvironmentInfoCollectorTest {
         assertThat(result).doesNotContain("api_key");
         assertThat(result).doesNotContain("apiKey");
         assertThat(result).doesNotContain("sk-");
+    }
+
+    @Test
+    void omitsGitStatusInNonGitDir(@TempDir Path tempDir) {
+        String origDir = System.getProperty("user.dir");
+        try {
+            System.setProperty("user.dir", tempDir.toString());
+            String result = EnvironmentInfoCollector.collect("m", "v");
+            assertThat(result).contains("Working directory:");
+            assertThat(result).contains("Platform:");
+            assertThat(result).doesNotContain("Git status:");
+        } finally {
+            System.setProperty("user.dir", origDir);
+        }
     }
 }

@@ -29,6 +29,7 @@ public class EnvironmentInfoCollector {
                 p.destroyForcibly();
                 return null;
             }
+            if (p.exitValue() != 0) return null;
             String out = new String(p.getInputStream().readAllBytes()).trim();
             return out.isEmpty() ? "clean" : out;
         } catch (Exception e) {

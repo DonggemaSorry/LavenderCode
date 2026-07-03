@@ -62,4 +62,19 @@ class RoundCollectorTest {
         RoundResult result = rc.consume(iter, cancelFlag);
         assertThat(result.fullText()).isEqualTo("partial"); // only first delta
     }
+
+    @Test
+    void shouldExtractCacheTokensFromUsage() {
+        var iter = mock(StreamEventIterator.class);
+        when(iter.hasNext()).thenReturn(true, true, false);
+        when(iter.next()).thenReturn(
+            new StreamEvent.Usage(10, 5, 3, 8),
+            new StreamEvent.StreamComplete()
+        );
+        List<AgentEvent> events = new ArrayList<>();
+        var rc = new RoundCollector(events::add);
+        RoundResult result = rc.consume(iter, new AtomicBoolean(false));
+        assertThat(result.cacheCreationTokens()).isEqualTo(3);
+        assertThat(result.cacheReadTokens()).isEqualTo(8);
+    }
 }

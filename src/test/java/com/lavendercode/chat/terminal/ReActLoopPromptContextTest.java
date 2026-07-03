@@ -61,6 +61,41 @@ class ReActLoopPromptContextTest {
         @Override public void close() {}
     }
 
+    /** Mock provider that returns predefined StreamEvent lists per round */
+    private static class MultiRoundProvider implements LlmProvider {
+        final List<PromptContext> capturedCtxs = new ArrayList<>();
+        private final List<List<StreamEvent>> roundEvents;
+        private int callIndex = 0;
+
+        MultiRoundProvider(List<List<StreamEvent>> roundEvents) {
+            this.roundEvents = roundEvents;
+        }
+
+        @Override public String protocol() { return "mock"; }
+
+        @Override
+        public StreamEventIterator streamChat(List<Message> history, LlmConfig config) {
+            return streamChat(history, config, List.of());
+        }
+
+        @Override
+        public StreamEventIterator streamChat(List<Message> history, LlmConfig config,
+                                               List<ToolDefinition> toolDefs) {
+            return streamChat(history, config, toolDefs, null);
+        }
+
+        @Override
+        public StreamEventIterator streamChat(List<Message> history, LlmConfig config,
+                                               List<ToolDefinition> toolDefs,
+                                               PromptContext promptContext) {
+            if (promptContext != null) capturedCtxs.add(promptContext);
+            List<StreamEvent> events = callIndex < roundEvents.size()
+                ? roundEvents.get(callIndex++)
+                : List.of(new StreamEvent.ContentDelta("done"), new StreamEvent.StreamComplete());
+            return new SingleEventIterator(events.toArray(new StreamEvent[0]));
+        }
+    }
+
     private LlmConfig config() {
         return new LlmConfig(List.of(new ProviderConfig("mock","mock","m","http://localhost","k",null)), new Options());
     }
@@ -168,5 +203,132 @@ class ReActLoopPromptContextTest {
         List<AgentEvent> events = new ArrayList<>();
         loop.run("test", events::add);
         assertThat(events).anyMatch(e -> e instanceof AgentEvent.Error);
+    }
+
+    @Test
+    void ch04MultiRoundStillWorks() {
+        ToolRegistry.register(new Tool() {
+            @Override public String name() { return "test_tool"; }
+            @Override public String description() { return "test"; }
+            @Override public ToolParameterSchema parameters() {
+                return new ToolParameterSchema("object", Map.of(), List.of());
+            }
+            @Override public ToolResult execute(Map<String, Object> p) {
+                return ToolResult.success("ok", "result");
+            }
+            @Override public boolean isReadOnly() { return true; }
+        });
+
+        var provider = new MultiRoundProvider(List.of(
+            List.of(
+                new StreamEvent.ToolCallStart("c1", "test_tool"),
+                new StreamEvent.ToolCallDelta("c1", "{}"),
+                new StreamEvent.ToolCallEnd("c1", "test_tool", Map.of()),
+                new StreamEvent.Usage(10, 5, 0, 0),
+                new StreamEvent.StreamComplete()
+            ),
+            List.of(
+                new StreamEvent.ContentDelta("done"),
+                new StreamEvent.Usage(10, 5, 0, 0),
+                new StreamEvent.StreamComplete()
+            )
+        ));
+
+        var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3);
+        loop.setConfig(config(), List.of(), "stable", "env", new PlanModeManager());
+        List<AgentEvent> events = new ArrayList<>();
+        loop.run("test", events::add);
+
+        assertThat(events).anyMatch(e -> e instanceof AgentEvent.Complete);
+        assertThat(provider.capturedCtxs).hasSize(2);
+    }
+
+    @Test
+    void planModeMultiRoundHistoryLegal() {
+        ToolRegistry.register(new Tool() {
+            @Override public String name() { return "read_tool"; }
+            @Override public String description() { return "read"; }
+            @Override public ToolParameterSchema parameters() {
+                return new ToolParameterSchema("object", Map.of(), List.of());
+            }
+            @Override public ToolResult execute(Map<String, Object> p) {
+                return ToolResult.success("ok", "content");
+            }
+            @Override public boolean isReadOnly() { return true; }
+        });
+
+        var provider = new MultiRoundProvider(List.of(
+            List.of(
+                new StreamEvent.ToolCallStart("c1", "read_tool"),
+                new StreamEvent.ToolCallDelta("c1", "{}"),
+                new StreamEvent.ToolCallEnd("c1", "read_tool", Map.of()),
+                new StreamEvent.Usage(10, 5, 3, 0),
+                new StreamEvent.StreamComplete()
+            ),
+            List.of(
+                new StreamEvent.ToolCallStart("c2", "read_tool"),
+                new StreamEvent.ToolCallDelta("c2", "{}"),
+                new StreamEvent.ToolCallEnd("c2", "read_tool", Map.of()),
+                new StreamEvent.Usage(10, 5, 0, 8),
+                new StreamEvent.StreamComplete()
+            ),
+            List.of(
+                new StreamEvent.ContentDelta("plan complete"),
+                new StreamEvent.Usage(10, 5, 0, 8),
+                new StreamEvent.StreamComplete()
+            )
+        ));
+
+        var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3);
+        var planMode = new PlanModeManager();
+        planMode.enterPlanMode();
+        loop.setConfig(config(), List.of(), "stable", "env", planMode);
+        List<AgentEvent> events = new ArrayList<>();
+        loop.run("explore the codebase", events::add);
+
+        List<Message> history = sessionManager.getHistory();
+        assertHistoryLegal(history);
+        for (Message msg : history) {
+            if (msg.content() != null) {
+                assertThat(msg.content()).doesNotContain("<system-reminder>");
+            }
+        }
+    }
+
+    @Test
+    void cacheTokensLoggedInRoundResult() {
+        var provider = new CtxCaptureProvider(List.of("done")) {
+            @Override
+            public StreamEventIterator streamChat(List<Message> history, LlmConfig config,
+                                                   List<ToolDefinition> toolDefs,
+                                                   PromptContext promptContext) {
+                if (promptContext != null) capturedCtxs.add(promptContext);
+                return new SingleEventIterator(
+                    new StreamEvent.ContentDelta("done"),
+                    new StreamEvent.Usage(10, 5, 3, 8),
+                    new StreamEvent.StreamComplete());
+            }
+        };
+        var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3);
+        loop.setConfig(config(), List.of(), "stable", "env", new PlanModeManager());
+        List<AgentEvent> events = new ArrayList<>();
+        loop.run("test", events::add);
+        assertThat(events).anyMatch(e -> e instanceof AgentEvent.Complete);
+        assertThat(events).anyMatch(e -> e instanceof AgentEvent.Usage);
+    }
+
+    private void assertHistoryLegal(List<Message> history) {
+        for (int i = 0; i < history.size(); i++) {
+            Message msg = history.get(i);
+            if (i > 0) {
+                assertThat(msg.role()).isNotEqualTo(history.get(i - 1).role());
+            }
+            if (!msg.toolCalls().isEmpty()) {
+                int toolCount = msg.toolCalls().size();
+                int following = 0;
+                for (int j = i + 1; j < history.size() && history.get(j).role() == Role.TOOL; j++) following++;
+                assertThat(following).isEqualTo(toolCount);
+            }
+        }
     }
 }

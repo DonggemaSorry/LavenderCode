@@ -53,4 +53,12 @@ class ReminderInjectorTest {
         assertThat(r.get()).contains("read-only tools");
         assertThat(r.get()).contains("DO NOT");
     }
+
+    @Test
+    void briefReminderUnder50Tokens() {
+        var r = ReminderInjector.inject(2, true);
+        assertThat(r).isPresent();
+        // Rough token estimate: ~4 chars per token, 50 tokens ≈ 200 chars
+        assertThat(r.get().length()).isLessThan(200);
+    }
 }

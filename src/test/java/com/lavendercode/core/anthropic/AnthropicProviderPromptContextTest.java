@@ -5,11 +5,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lavendercode.core.config.*;
 import com.lavendercode.core.prompt.PromptContext;
 import com.lavendercode.core.provider.*;
+import com.lavendercode.core.tool.ToolCall;
+import com.lavendercode.core.tool.ToolResult;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
 import org.junit.jupiter.api.*;
 import java.util.List;
+import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class AnthropicProviderPromptContextTest {
@@ -143,6 +146,40 @@ class AnthropicProviderPromptContextTest {
         assertThat(usage).isNotNull();
         assertThat(usage.cacheCreationTokens()).isZero();
         assertThat(usage.cacheReadTokens()).isZero();
+    }
+
+    @Test
+    void reminderDoesNotBreakToolCallResultPairing() throws Exception {
+        mockServer.enqueue(new MockResponse().setBody(sseResponse("{\"input_tokens\":10}"))
+            .setHeader("Content-Type", "text/event-stream"));
+
+        var history = List.of(
+            new Message(Role.USER, "read the file"),
+            Message.assistantWithTools(List.of(new ToolCall("c1", "read_file", Map.of()))),
+            Message.toolResult("c1", ToolResult.success("ok", "file content"))
+        );
+
+        provider.streamChat(history, config(mockServer.url("/").toString().replaceAll("/$","")), List.of(), ctxWithReminder());
+        RecordedRequest req = mockServer.takeRequest();
+        JsonNode body = mapper.readTree(req.getBody().readUtf8());
+        JsonNode messages = body.get("messages");
+
+        // Last message is the reminder
+        int lastIdx = messages.size() - 1;
+        assertThat(messages.get(lastIdx).get("role").asText()).isEqualTo("user");
+        assertThat(messages.get(lastIdx).get("content").asText()).contains("<system-reminder>");
+
+        // Message before reminder is the tool_result (not separated by reminder)
+        JsonNode beforeReminder = messages.get(lastIdx - 1);
+        assertThat(beforeReminder.get("role").asText()).isEqualTo("user");
+        assertThat(beforeReminder.get("content").isArray()).isTrue();
+        assertThat(beforeReminder.get("content").get(0).get("type").asText()).isEqualTo("tool_result");
+
+        // tool_use (assistant) is before tool_result, not separated by reminder
+        JsonNode assistant = messages.get(lastIdx - 2);
+        assertThat(assistant.get("role").asText()).isEqualTo("assistant");
+        assertThat(assistant.get("content").isArray()).isTrue();
+        assertThat(assistant.get("content").get(0).get("type").asText()).isEqualTo("tool_use");
     }
 
     @Test
