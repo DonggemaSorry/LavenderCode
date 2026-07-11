@@ -20,7 +20,7 @@ public record PermissionRule(String toolName, String pattern, Effect effect) {
     }
 
     public boolean matches(ToolCallContext ctx) {
-        if (!toolName.equals(ctx.friendlyName())) {
+        if (!GlobMatcher.matches(ctx.friendlyName(), toolName, false)) {
             return false;
         }
         boolean pathMode = ctx.category() != ToolCategory.COMMAND;
