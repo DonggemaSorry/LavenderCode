@@ -1,5 +1,6 @@
 package com.lavendercode.chat.terminal;
 
+import com.lavendercode.core.permission.HitlRequest;
 import com.lavendercode.core.provider.Role;
 import org.jline.terminal.Terminal;
 import org.jline.utils.AttributedString;
@@ -20,11 +21,13 @@ public class TerminalRenderer {
     private int viewportStart;
     private boolean autoScroll = true;
     private Theme theme;
-    private String providerName = "";
+    private String modeLabel = "";
     private String modelName = "";
     private String statusText = null;
     private int tokenCount = 0;
     private String currentToolName = "";
+    private HitlRequest activePermissionPrompt;
+    private int permissionPromptSelection;
 
     private static final int STATUS_HEIGHT = 1;
 
@@ -46,7 +49,7 @@ public class TerminalRenderer {
         this.renderQueue = renderQueue;
         this.blocks = new ArrayList<>();
         this.theme = theme;
-        this.providerName = providerName != null ? providerName : "";
+        this.modeLabel = providerName != null ? providerName : "";
         this.modelName = modelName != null ? modelName : "";
         this.inputLayout = inputLayout;
         recalcLayout();
@@ -143,12 +146,24 @@ public class TerminalRenderer {
                 reflowAll();
                 drawFull();
             }
-            case RenderEvent.StatusUpdate(var pn, var mn, var st, int tc) -> {
-                this.providerName = pn;
+            case RenderEvent.StatusUpdate(var ml, var mn, var st, int tc) -> {
+                this.modeLabel = ml;
                 this.modelName = mn;
-                if (st != null) this.statusText = st;
+                if (st != null) {
+                    this.statusText = st;
+                }
                 this.tokenCount = tc;
                 drawStatusBar();
+            }
+            case RenderEvent.PermissionPrompt(var req, var future) -> {
+                activePermissionPrompt = req;
+                permissionPromptSelection = req.selectedIndex();
+                drawPermissionPrompt();
+            }
+            case RenderEvent.PermissionPromptDismiss() -> {
+                activePermissionPrompt = null;
+                permissionPromptSelection = 0;
+                drawFull();
             }
             case RenderEvent.ToolCallRender(var tcid, var tname, var params, var status) -> {
                 currentToolName = tname;
@@ -184,7 +199,62 @@ public class TerminalRenderer {
         terminal.puts(InfoCmp.Capability.clear_screen);
         drawStatusBar();
         drawViewport();
+        if (activePermissionPrompt != null) {
+            drawPermissionPrompt();
+        }
         drawInputDraft("", 0);
+    }
+
+    private void drawPermissionPrompt() {
+        if (activePermissionPrompt == null) {
+            return;
+        }
+        int width = Math.max(20, terminal.getWidth() - 2);
+        String[] options = {
+            "1. 允许本次",
+            "2. 永久放行（写入本地规则）",
+            "3. 拒绝本次"
+        };
+        int boxHeight = 8;
+        int startRow = Math.max(STATUS_HEIGHT + 1, separatorTopRow - boxHeight - 1);
+
+        terminal.puts(InfoCmp.Capability.cursor_address, startRow, 1);
+        terminal.writer().print(theme.apply(StyleCatalog.SYSTEM_MESSAGE,
+            "\u250C\u2500 权限确认 " + "\u2500".repeat(Math.max(0, width - 12))).toAnsi(terminal));
+
+        String[] lines = {
+            "工具: " + activePermissionPrompt.toolName(),
+            "参数: " + activePermissionPrompt.detail(),
+            "原因: " + activePermissionPrompt.reason(),
+            ""
+        };
+        for (int i = 0; i < lines.length; i++) {
+            terminal.puts(InfoCmp.Capability.cursor_address, startRow + 1 + i, 1);
+            terminal.puts(InfoCmp.Capability.clr_eol);
+            terminal.writer().print(theme.apply(StyleCatalog.ASSISTANT_MESSAGE,
+                "\u2502 " + truncate(lines[i], width - 2)).toAnsi(terminal));
+        }
+
+        for (int i = 0; i < options.length; i++) {
+            terminal.puts(InfoCmp.Capability.cursor_address, startRow + 5 + i, 1);
+            terminal.puts(InfoCmp.Capability.clr_eol);
+            String prefix = i == permissionPromptSelection ? "\u276F " : "  ";
+            var style = i == permissionPromptSelection ? StyleCatalog.PROMPT : StyleCatalog.ASSISTANT_MESSAGE;
+            terminal.writer().print(theme.apply(style,
+                "\u2502 " + prefix + options[i]).toAnsi(terminal));
+        }
+
+        terminal.puts(InfoCmp.Capability.cursor_address, startRow + boxHeight - 1, 1);
+        terminal.writer().print(theme.apply(StyleCatalog.INPUT_BORDER,
+            "\u2514" + "\u2500".repeat(width)).toAnsi(terminal));
+        terminal.flush();
+    }
+
+    private static String truncate(String text, int maxLen) {
+        if (text == null) {
+            return "";
+        }
+        return text.length() <= maxLen ? text : text.substring(0, Math.max(0, maxLen - 3)) + "...";
     }
 
     private void drawInputChrome() {
@@ -263,8 +333,10 @@ public class TerminalRenderer {
         int w = terminal.getWidth();
         int colW = w / 3;
 
-        String left = providerName.isEmpty() ? modelName : providerName;
-        if (left.length() > colW - 1) left = left.substring(0, colW - 1);
+        String left = modeLabel.isEmpty() ? modelName : "\u26E8 " + modeLabel;
+        if (left.length() > colW - 1) {
+            left = left.substring(0, colW - 1);
+        }
 
         String mid = statusText != null ? statusText : "";
         if (mid.length() > colW - 2) mid = mid.substring(0, colW - 2);

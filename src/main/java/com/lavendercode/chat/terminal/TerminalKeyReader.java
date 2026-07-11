@@ -53,6 +53,9 @@ final class TerminalKeyReader {
         if (esc == CsiKeyDecoder.KEY_BRACKETED_PASTE) {
             return new TerminalInput.Paste(readBracketedPasteContent());
         }
+        if (esc == CsiKeyDecoder.KEY_SHIFT_TAB) {
+            return new TerminalInput.Special(TerminalInput.SpecialKey.SHIFT_TAB);
+        }
         return new TerminalInput.Escape();
     }
 

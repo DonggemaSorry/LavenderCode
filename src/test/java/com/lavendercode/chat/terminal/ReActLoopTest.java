@@ -4,7 +4,10 @@ import com.lavendercode.chat.session.InMemorySessionManager;
 import com.lavendercode.chat.session.SessionManager;
 import com.lavendercode.core.provider.*;
 import com.lavendercode.core.tool.*;
+import com.lavendercode.core.permission.PermissionMode;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.io.TempDir;
+import java.nio.file.Path;
 import java.util.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
@@ -15,11 +18,14 @@ class ReActLoopTest {
     BatchingToolExecutor batchExec;
     TokenAccumulator tokens;
 
+    @TempDir
+    Path projectRoot;
+
     @BeforeEach
     void setup() {
         session = new InMemorySessionManager();
         provider = mock(LlmProvider.class);
-        batchExec = new BatchingToolExecutor(30, 120);
+        batchExec = PermissionTestSupport.bypassExecutor(30, 120, projectRoot);
         tokens = new TokenAccumulator();
         ToolRegistry.clear();
     }
@@ -209,7 +215,7 @@ class ReActLoopTest {
     @Test
     void shouldKeepHistoryLegalAfterCancel_Ac9_Ac10() throws Exception {
         ToolRegistry.register(new Tool() {
-            @Override public String name() { return "slow_tool"; }
+            @Override public String name() { return "read_file"; }
             @Override public String description() { return "slow"; }
             @Override public ToolParameterSchema parameters() {
                 return new ToolParameterSchema("object", Map.of(), List.of()); }
@@ -221,9 +227,9 @@ class ReActLoopTest {
         });
 
         var iter1 = mockIter(
-            new StreamEvent.ToolCallStart("c1", "slow_tool"),
-            new StreamEvent.ToolCallDelta("c1", "{}"),
-            new StreamEvent.ToolCallEnd("c1", "slow_tool", Map.of()),
+            new StreamEvent.ToolCallStart("c1", "read_file"),
+            new StreamEvent.ToolCallDelta("c1", "{\"path\":\"a\"}"),
+            new StreamEvent.ToolCallEnd("c1", "read_file", Map.of("path", "a")),
             new StreamEvent.StreamComplete());
         when(provider.streamChat(anyList(), any(), anyList())).thenReturn(iter1);
 

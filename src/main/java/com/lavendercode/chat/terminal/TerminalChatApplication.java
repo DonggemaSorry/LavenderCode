@@ -5,6 +5,7 @@ import com.lavendercode.core.config.LlmConfig;
 import com.lavendercode.core.provider.LlmProvider;
 import org.jline.terminal.Terminal;
 
+import java.nio.file.Path;
 import java.util.concurrent.*;
 
 /**
@@ -18,6 +19,23 @@ public class TerminalChatApplication {
     private final String modelName;
     private final LlmConfig config;
     private final Theme theme;
+    private final Path projectRoot;
+
+    public TerminalChatApplication(SessionManager sessionManager,
+                                   LlmProvider provider,
+                                   String providerName,
+                                   String modelName,
+                                   LlmConfig config,
+                                   Theme theme,
+                                   Path projectRoot) {
+        this.sessionManager = sessionManager;
+        this.provider = provider;
+        this.providerName = providerName;
+        this.modelName = modelName;
+        this.config = config;
+        this.theme = theme;
+        this.projectRoot = projectRoot;
+    }
 
     public TerminalChatApplication(SessionManager sessionManager,
                                    LlmProvider provider,
@@ -25,12 +43,8 @@ public class TerminalChatApplication {
                                    String modelName,
                                    LlmConfig config,
                                    Theme theme) {
-        this.sessionManager = sessionManager;
-        this.provider = provider;
-        this.providerName = providerName;
-        this.modelName = modelName;
-        this.config = config;
-        this.theme = theme;
+        this(sessionManager, provider, providerName, modelName, config, theme,
+            Path.of("").toAbsolutePath().normalize());
     }
 
     public void run(Terminal terminal) throws Exception {
@@ -48,12 +62,13 @@ public class TerminalChatApplication {
         NetworkOrchestrator orchestrator = new NetworkOrchestrator(
             deltaBuffer, renderQueue, inputQueue,
             sessionManager, provider, providerName, modelName, config,
-            timerScheduler
+            timerScheduler, projectRoot
         );
         InputAreaLayout inputLayout = new InputAreaLayout();
         TerminalRenderer renderer = new TerminalRenderer(
             terminal, renderQueue, theme, providerName, modelName, inputLayout);
-        InputSystem inputSystem = new InputSystem(terminal, inputQueue, renderQueue, inputLayout);
+        InputSystem inputSystem = new InputSystem(
+            terminal, inputQueue, renderQueue, inputLayout, orchestrator.hitlCoordinator());
 
         // Threads
         Thread inputThread = new Thread(inputSystem::run, "lavender-input");

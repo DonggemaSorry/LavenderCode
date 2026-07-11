@@ -1,7 +1,10 @@
 package com.lavendercode.chat.terminal;
 
+import com.lavendercode.core.permission.HitlChoice;
+import com.lavendercode.core.permission.HitlRequest;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 
 public sealed interface RenderEvent
@@ -22,6 +25,8 @@ public sealed interface RenderEvent
             RenderEvent.RefreshInputChrome,
             RenderEvent.UpdateInputDraft,
             RenderEvent.RefreshAll,
+            RenderEvent.PermissionPrompt,
+            RenderEvent.PermissionPromptDismiss,
             RenderEvent.Shutdown {
 
     record AppendToMessage(String text) implements RenderEvent {
@@ -62,16 +67,20 @@ public sealed interface RenderEvent
     }
 
     record StatusUpdate(
-        String providerName,
+        String modeLabel,
         String modelName,
         String statusText,
         int tokenCount
     ) implements RenderEvent {
         public StatusUpdate {
-            Objects.requireNonNull(providerName, "providerName must not be null");
+            Objects.requireNonNull(modeLabel, "modeLabel must not be null");
             Objects.requireNonNull(modelName, "modelName must not be null");
         }
     }
+
+    record PermissionPrompt(HitlRequest request, CompletableFuture<HitlChoice> future) implements RenderEvent {}
+
+    record PermissionPromptDismiss() implements RenderEvent {}
 
     record RefreshInputChrome(CountDownLatch done) implements RenderEvent {
         public RefreshInputChrome() { this(null); }

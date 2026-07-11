@@ -9,6 +9,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import org.junit.jupiter.api.io.TempDir;
+
+import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.function.Consumer;
@@ -26,6 +29,9 @@ class NetworkOrchestratorTest {
     private LlmProvider provider;
     private NetworkOrchestrator orchestrator;
 
+    @TempDir
+    Path projectRoot;
+
     @BeforeEach
     void setUp() {
         inputQueue = new LinkedBlockingQueue<>();
@@ -41,7 +47,7 @@ class NetworkOrchestratorTest {
         orchestrator = new NetworkOrchestrator(
             deltaBuffer, renderQueue, inputQueue,
             sessionManager, provider, "test-provider", "gpt-4", config,
-            scheduler
+            scheduler, projectRoot
         );
     }
 

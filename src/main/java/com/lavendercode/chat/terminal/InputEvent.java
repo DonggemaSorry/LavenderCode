@@ -8,6 +8,10 @@ public sealed interface InputEvent {
 
     record Shutdown() implements InputEvent {}
 
+    record CyclePermissionMode() implements InputEvent {}
+
+    record HitlChoice(com.lavendercode.core.permission.HitlChoice choice) implements InputEvent {}
+
     enum CommandType {
         EXIT, QUIT, CLEAR, HELP, CANCEL, SCROLL, ESC_CANCEL, PLAN, DO
     }

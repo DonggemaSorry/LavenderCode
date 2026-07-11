@@ -11,6 +11,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import org.junit.jupiter.api.io.TempDir;
+
+import java.nio.file.Path;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.*;
@@ -35,6 +38,9 @@ class TerminalChatIntegrationTest {
     private LlmProvider provider;
     private SessionManager sessionManager;
     private Thread networkThread;
+
+    @TempDir
+    Path projectRoot;
 
     /**
      * Returns a StreamEventIterator that blocks on hasNext() until
@@ -89,7 +95,7 @@ class TerminalChatIntegrationTest {
         orchestrator = new NetworkOrchestrator(
             deltaBuffer, renderQueue, inputQueue,
             sessionManager, provider, "test-provider", "gpt-4", config,
-            scheduler
+            scheduler, projectRoot
         );
 
         networkThread = new Thread(orchestrator::run, "lavender-network-test");

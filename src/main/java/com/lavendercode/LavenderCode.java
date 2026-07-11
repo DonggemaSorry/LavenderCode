@@ -75,7 +75,8 @@ public class LavenderCode {
         TerminalChatApplication app = new TerminalChatApplication(
             sessionManager, provider,
             providerName, selectedProvider.model(), config,
-            Theme.dark()
+            Theme.dark(),
+            Path.of("").toAbsolutePath().normalize()
         );
         app.run(terminal);
     }

@@ -5,11 +5,16 @@ import com.lavendercode.chat.session.SessionManager;
 import com.lavendercode.core.provider.*;
 import com.lavendercode.core.tool.*;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.io.TempDir;
+import java.nio.file.Path;
 import java.util.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 class ReActLoopProtocolTest {
+
+    @TempDir
+    Path projectRoot;
 
     @BeforeEach
     void setup() {
@@ -62,7 +67,7 @@ class ReActLoopProtocolTest {
 
     private List<AgentEvent> runLoop(LlmProvider provider) {
         var session = new InMemorySessionManager();
-        var batchExec = new BatchingToolExecutor(30, 120);
+        var batchExec = PermissionTestSupport.bypassExecutor(30, 120, projectRoot);
         var tokens = new TokenAccumulator();
         var loop = new ReActLoop(provider, session, batchExec, tokens, 10, 3);
         List<AgentEvent> events = new ArrayList<>();
