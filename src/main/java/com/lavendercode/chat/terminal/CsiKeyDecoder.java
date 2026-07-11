@@ -11,6 +11,7 @@ final class CsiKeyDecoder {
     static final int KEY_SCROLL_BOTTOM = -1006;
     static final int KEY_WHEEL_UP = -1007;
     static final int KEY_WHEEL_DOWN = -1008;
+    static final int KEY_SHIFT_TAB = -1009;
     static final int KEY_BRACKETED_PASTE = -2000;
 
     private CsiKeyDecoder() {}
@@ -21,6 +22,7 @@ final class CsiKeyDecoder {
             case 'B' -> KEY_SCROLL_DOWN;
             case 'H' -> KEY_SCROLL_TOP;
             case 'F' -> KEY_SCROLL_BOTTOM;
+            case 'Z' -> KEY_SHIFT_TAB;
             case '~' -> switch (params) {
                 case "5" -> KEY_PAGE_UP;
                 case "6" -> KEY_PAGE_DOWN;

@@ -2,54 +2,60 @@ package com.lavendercode.chat.terminal;
 
 import com.lavendercode.core.tool.*;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.io.TempDir;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class BatchingToolExecutorTest {
+    @TempDir
+    Path root;
+
     @AfterEach
-    void cleanup() { ToolRegistry.clear(); }
+    void cleanup() {
+        ToolRegistry.clear();
+    }
 
     @Test
     void shouldRunReadOnlyToolsConcurrently() throws Exception {
-        ToolRegistry.register(slowTool("ro1", 200, true));
-        ToolRegistry.register(slowTool("ro2", 200, true));
-        var executor = new BatchingToolExecutor(30, 120);
+        ToolRegistry.register(slowTool("read_file", 200, true));
+        ToolRegistry.register(slowTool("search_file", 200, true));
+        var executor = PermissionTestSupport.bypassExecutor(30, 120, root);
         var calls = List.of(
-            new ToolCall("c1", "ro1", Map.of()),
-            new ToolCall("c2", "ro2", Map.of()));
+            new ToolCall("c1", "read_file", Map.of("path", "a")),
+            new ToolCall("c2", "search_file", Map.of("pattern", "x")));
         long start = System.currentTimeMillis();
         List<ToolResult> results = executor.execute(calls, (ev) -> {}, new AtomicBoolean(false));
         long elapsed = System.currentTimeMillis() - start;
         assertThat(results).hasSize(2);
-        // 并发: 总耗时≈最慢者(200ms)，不是串行(400ms)
         assertThat(elapsed).isLessThan(400);
     }
 
     @Test
     void shouldRunSideEffectToolsSerially() throws Exception {
         List<String> order = Collections.synchronizedList(new ArrayList<>());
-        ToolRegistry.register(orderTrackTool("write1", order, 100));
-        ToolRegistry.register(orderTrackTool("write2", order, 100));
-        var executor = new BatchingToolExecutor(30, 120);
+        ToolRegistry.register(orderTrackTool("write_file", order, 100));
+        ToolRegistry.register(orderTrackTool("edit_file", order, 100));
+        var executor = PermissionTestSupport.bypassExecutor(30, 120, root);
         var calls = List.of(
-            new ToolCall("c1", "write1", Map.of()),
-            new ToolCall("c2", "write2", Map.of()));
+            new ToolCall("c1", "write_file", Map.of("path", "a", "content", "x")),
+            new ToolCall("c2", "edit_file", Map.of("path", "a", "old", "x", "new", "y")));
         List<ToolResult> results = executor.execute(calls, (ev) -> {}, new AtomicBoolean(false));
         assertThat(results).hasSize(2);
-        // 串行: write1 完成后才开始 write2
-        assertThat(order).containsExactly("write1-start", "write1-end", "write2-start", "write2-end");
+        assertThat(order).containsExactly("write_file-start", "write_file-end", "edit_file-start", "edit_file-end");
     }
 
     @Test
     void shouldPreserveOrderWithMixedBatch() {
-        ToolRegistry.register(slowTool("ro", 50, true));
-        ToolRegistry.register(orderTrackTool("write", Collections.synchronizedList(new ArrayList<>()), 50));
-        var executor = new BatchingToolExecutor(30, 120);
+        ToolRegistry.register(slowTool("read_file", 50, true));
+        ToolRegistry.register(orderTrackTool("write_file", Collections.synchronizedList(new ArrayList<>()), 50));
+        ToolRegistry.register(slowTool("search_file", 50, true));
+        var executor = PermissionTestSupport.bypassExecutor(30, 120, root);
         var calls = List.of(
-            new ToolCall("c1", "ro", Map.of()),
-            new ToolCall("c2", "write", Map.of()),
-            new ToolCall("c3", "ro", Map.of()));
+            new ToolCall("c1", "read_file", Map.of("path", "a")),
+            new ToolCall("c2", "write_file", Map.of("path", "b", "content", "x")),
+            new ToolCall("c3", "search_file", Map.of("pattern", "x")));
         List<ToolResult> results = executor.execute(calls, (ev) -> {}, new AtomicBoolean(false));
         assertThat(results).hasSize(3);
         assertThat(results.get(0).success()).isTrue();
@@ -59,17 +65,17 @@ class BatchingToolExecutorTest {
 
     @Test
     void shouldReturnCancelledForUnexecutedOnCancel() {
-        ToolRegistry.register(slowTool("slow", 5000, true));
-        var executor = new BatchingToolExecutor(30, 120);
-        var cancelFlag = new AtomicBoolean(true); // pre-cancelled
-        var calls = List.of(new ToolCall("c1", "slow", Map.of()));
+        ToolRegistry.register(slowTool("read_file", 5000, true));
+        var executor = PermissionTestSupport.bypassExecutor(30, 120, root);
+        var cancelFlag = new AtomicBoolean(true);
+        var calls = List.of(new ToolCall("c1", "read_file", Map.of("path", "a")));
         List<ToolResult> results = executor.execute(calls, (ev) -> {}, cancelFlag);
         assertThat(results.get(0).errorCategory()).isEqualTo("CANCELLED");
     }
 
     @Test
     void shouldReturnErrorForUnknownTool() {
-        var executor = new BatchingToolExecutor(30, 120);
+        var executor = PermissionTestSupport.bypassExecutor(30, 120, root);
         var calls = List.of(new ToolCall("c1", "fake_tool", Map.of()));
         List<ToolResult> results = executor.execute(calls, (ev) -> {}, new AtomicBoolean(false));
         assertThat(results.get(0).errorCategory()).isEqualTo("TOOL_NOT_FOUND");
@@ -87,6 +93,7 @@ class BatchingToolExecutorTest {
             @Override public boolean isReadOnly() { return readOnly; }
         };
     }
+
     private Tool orderTrackTool(String name, List<String> order, long delayMs) {
         return new Tool() {
             @Override public String name() { return name; }

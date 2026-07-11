@@ -1,5 +1,6 @@
 package com.lavendercode.chat.terminal;
 
+import com.lavendercode.core.permission.HitlChoice;
 import org.jline.terminal.Attributes;
 import org.jline.terminal.Terminal;
 
@@ -20,16 +21,26 @@ public class InputSystem {
     private final TerminalKeyReader keyReader;
     private final BlockingQueue<InputEvent> inputQueue;
     private final BlockingQueue<RenderEvent> renderQueue;
+    private final HitlCoordinator hitlCoordinator;
     private final AtomicBoolean shutdown = new AtomicBoolean(false);
 
     public InputSystem(Terminal terminal,
                        BlockingQueue<InputEvent> inputQueue,
                        BlockingQueue<RenderEvent> renderQueue,
-                       InputAreaLayout inputLayout) {
+                       InputAreaLayout inputLayout,
+                       HitlCoordinator hitlCoordinator) {
         this.terminal = terminal;
         this.keyReader = new TerminalKeyReader(terminal);
         this.inputQueue = inputQueue;
         this.renderQueue = renderQueue;
+        this.hitlCoordinator = hitlCoordinator;
+    }
+
+    public InputSystem(Terminal terminal,
+                       BlockingQueue<InputEvent> inputQueue,
+                       BlockingQueue<RenderEvent> renderQueue,
+                       InputAreaLayout inputLayout) {
+        this(terminal, inputQueue, renderQueue, inputLayout, null);
     }
 
     public void run() {
@@ -84,7 +95,16 @@ public class InputSystem {
         while (true) {
             TerminalInput input = keyReader.readInput();
 
+            if (hitlCoordinator != null && hitlCoordinator.isAwaiting()) {
+                if (handleHitlInput(input)) {
+                    continue;
+                }
+            }
+
             switch (input) {
+                case TerminalInput.Special(var key) when key == TerminalInput.SpecialKey.SHIFT_TAB -> {
+                    inputQueue.offer(new InputEvent.CyclePermissionMode());
+                }
                 case TerminalInput.Scroll(var cmd) -> {
                     inputQueue.offer(new InputEvent.ExecuteCommand(InputEvent.CommandType.SCROLL, cmd));
                 }
@@ -112,7 +132,12 @@ public class InputSystem {
                     return null;
                 }
                 case TerminalInput.Escape() -> {
-                    inputQueue.offer(new InputEvent.ExecuteCommand(InputEvent.CommandType.ESC_CANCEL, ""));
+                    if (hitlCoordinator != null && hitlCoordinator.isAwaiting()) {
+                        inputQueue.offer(new InputEvent.HitlChoice(HitlChoice.DENY));
+                        inputQueue.offer(new InputEvent.ExecuteCommand(InputEvent.CommandType.ESC_CANCEL, ""));
+                    } else {
+                        inputQueue.offer(new InputEvent.ExecuteCommand(InputEvent.CommandType.ESC_CANCEL, ""));
+                    }
                 }
                 case TerminalInput.Character(var code) -> {
                     if (code == 4) {
@@ -124,7 +149,12 @@ public class InputSystem {
                         }
                         continue;
                     }
-                    if (code == 3) {  // Ctrl+C — exit
+                    if (code == 3) {
+                        if (hitlCoordinator != null && hitlCoordinator.isAwaiting()) {
+                            inputQueue.offer(new InputEvent.HitlChoice(HitlChoice.DENY));
+                            inputQueue.offer(new InputEvent.ExecuteCommand(InputEvent.CommandType.ESC_CANCEL, ""));
+                            continue;
+                        }
                         publishDraftSync("", 0);
                         shutdown.set(true);
                         inputQueue.offer(new InputEvent.Shutdown());
@@ -144,8 +174,60 @@ public class InputSystem {
                         publishDraftSync(buffer.toString(), cursor);
                     }
                 }
+                default -> { /* ignore other specials during normal editing */ }
             }
         }
+    }
+
+    private boolean handleHitlInput(TerminalInput input) {
+        switch (input) {
+            case TerminalInput.Character(var code) -> {
+                if (code == '1') {
+                    inputQueue.offer(new InputEvent.HitlChoice(HitlChoice.ALLOW_ONCE));
+                    return true;
+                }
+                if (code == '2') {
+                    inputQueue.offer(new InputEvent.HitlChoice(HitlChoice.ALLOW_PERMANENT));
+                    return true;
+                }
+                if (code == '3') {
+                    inputQueue.offer(new InputEvent.HitlChoice(HitlChoice.DENY));
+                    return true;
+                }
+                if (code == 3) {
+                    inputQueue.offer(new InputEvent.HitlChoice(HitlChoice.DENY));
+                    inputQueue.offer(new InputEvent.ExecuteCommand(InputEvent.CommandType.ESC_CANCEL, ""));
+                    return true;
+                }
+            }
+            case TerminalInput.Escape() -> {
+                inputQueue.offer(new InputEvent.HitlChoice(HitlChoice.DENY));
+                inputQueue.offer(new InputEvent.ExecuteCommand(InputEvent.CommandType.ESC_CANCEL, ""));
+                return true;
+            }
+            case TerminalInput.Submit() -> {
+                inputQueue.offer(new InputEvent.HitlChoice(choiceForIndex(hitlCoordinator.selectedIndex())));
+                return true;
+            }
+            case TerminalInput.Scroll(var cmd) -> {
+                if ("up".equals(cmd)) {
+                    hitlCoordinator.navigateSelection(-1);
+                } else if ("down".equals(cmd)) {
+                    hitlCoordinator.navigateSelection(1);
+                }
+                return true;
+            }
+            default -> { }
+        }
+        return false;
+    }
+
+    private static HitlChoice choiceForIndex(int index) {
+        return switch (index) {
+            case 1 -> HitlChoice.ALLOW_PERMANENT;
+            case 2 -> HitlChoice.DENY;
+            default -> HitlChoice.ALLOW_ONCE;
+        };
     }
 
     private static String normalizeNewlines(String text) {

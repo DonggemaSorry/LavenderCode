@@ -40,6 +40,11 @@ class CsiKeyDecoderTest {
     }
 
     @Test
+    void shouldDecodeShiftTab() {
+        assertThat(CsiKeyDecoder.decodeCsi("", 'Z')).isEqualTo(KEY_SHIFT_TAB);
+    }
+
+    @Test
     void shouldMapKeysToScrollCommands() {
         assertThat(CsiKeyDecoder.toScrollCommand(KEY_SCROLL_UP)).isEqualTo("up");
         assertThat(CsiKeyDecoder.toScrollCommand(KEY_PAGE_DOWN)).isEqualTo("page-down");

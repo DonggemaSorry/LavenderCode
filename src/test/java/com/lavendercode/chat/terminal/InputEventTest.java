@@ -37,18 +37,24 @@ class InputEventTest {
         assertThat(switch (send) {
             case InputEvent.SendMessage(var t) -> "msg:" + t;
             case InputEvent.ExecuteCommand(var c, var a) -> "cmd:" + c;
+            case InputEvent.CyclePermissionMode __ -> "cycle";
+            case InputEvent.HitlChoice(var choice) -> "hitl:" + choice;
             case InputEvent.Shutdown() -> "shutdown";
         }).isEqualTo("msg:x");
 
         assertThat(switch (cmd) {
             case InputEvent.SendMessage(var t) -> "msg:" + t;
             case InputEvent.ExecuteCommand(var c, var a) -> "cmd:" + c;
+            case InputEvent.CyclePermissionMode __ -> "cycle";
+            case InputEvent.HitlChoice(var choice) -> "hitl:" + choice;
             case InputEvent.Shutdown() -> "shutdown";
         }).isEqualTo("cmd:EXIT");
 
         assertThat(switch (shutdown) {
             case InputEvent.SendMessage(var t) -> "msg:" + t;
             case InputEvent.ExecuteCommand(var c, var a) -> "cmd:" + c;
+            case InputEvent.CyclePermissionMode __ -> "cycle";
+            case InputEvent.HitlChoice(var choice) -> "hitl:" + choice;
             case InputEvent.Shutdown() -> "shutdown";
         }).isEqualTo("shutdown");
     }

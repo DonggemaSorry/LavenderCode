@@ -3,6 +3,7 @@ package com.lavendercode.chat.terminal;
 import com.lavendercode.chat.session.SessionManager;
 import com.lavendercode.core.config.LlmConfig;
 import com.lavendercode.core.config.Options;
+import com.lavendercode.core.permission.*;
 import com.lavendercode.core.provider.LlmProvider;
 import com.lavendercode.core.tool.ToolDefinition;
 import com.lavendercode.core.tool.ToolResult;
@@ -10,12 +11,15 @@ import com.lavendercode.core.prompt.SystemPromptAssembler;
 import com.lavendercode.core.prompt.EnvironmentInfoCollector;
 import com.lavendercode.core.prompt.ToolDescriptionEnhancer;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 public class NetworkOrchestrator {
 
@@ -31,13 +35,14 @@ public class NetworkOrchestrator {
     private final LlmConfig config;
     private final Options options;
     private final ScheduledExecutorService timerScheduler;
+    private final Path projectRoot;
 
-    // ReAct loop components
     private final BatchingToolExecutor batchExecutor;
     private final TokenAccumulator tokenAccumulator = new TokenAccumulator();
-    private final PlanModeManager planMode = new PlanModeManager();
+    private final PermissionModeManager modeManager;
+    private final HitlCoordinator hitlCoordinator;
+    private final PermissionPipeline permissionPipeline;
 
-    // Runtime state
     private volatile ReActLoop currentLoop;
     private volatile Thread loopThread;
     private volatile ScheduledFuture<?> timerTask;
@@ -48,7 +53,8 @@ public class NetworkOrchestrator {
                                BlockingQueue<InputEvent> inputQueue,
                                SessionManager sessionManager, LlmProvider provider,
                                String providerName, String modelName, LlmConfig config,
-                               ScheduledExecutorService timerScheduler) {
+                               ScheduledExecutorService timerScheduler,
+                               Path projectRoot) {
         this.deltaBuffer = deltaBuffer;
         this.renderQueue = renderQueue;
         this.inputQueue = inputQueue;
@@ -59,25 +65,55 @@ public class NetworkOrchestrator {
         this.config = config;
         this.options = config.options();
         this.timerScheduler = timerScheduler;
+        this.projectRoot = projectRoot;
+
+        PermissionConfig permConfig = PermissionConfigLoader.load(
+            projectRoot,
+            Path.of(System.getProperty("user.home")).resolve(".lavendercode"));
+        this.modeManager = new PermissionModeManager(permConfig.defaultMode());
+        this.hitlCoordinator = new HitlCoordinator(renderQueue);
+        AtomicReference<RuleEngineLayer> ruleRef = new AtomicReference<>();
+        Consumer<List<PermissionRule>> reloadLocal = rules ->
+            ruleRef.set(RuleEngineLayer.fromTiers(rules, permConfig.projectRules(), permConfig.userRules()));
+        this.permissionPipeline = PermissionPipeline.create(
+            permConfig, modeManager::getMode, hitlCoordinator, projectRoot, reloadLocal);
         this.batchExecutor = new BatchingToolExecutor(
             options.fileOperationTimeoutSeconds(),
-            options.commandTimeoutSeconds()
-        );
+            options.commandTimeoutSeconds(),
+            permissionPipeline,
+            projectRoot);
+    }
+
+    public HitlCoordinator hitlCoordinator() {
+        return hitlCoordinator;
     }
 
     public void run() {
-        safePut(new RenderEvent.StatusUpdate(providerName, modelName, "", 0));
+        safePut(new RenderEvent.StatusUpdate(modeManager.getMode().label(), modelName, "", 0));
         try {
             while (true) {
                 InputEvent event = inputQueue.poll(100, TimeUnit.MILLISECONDS);
-                if (event == null) continue;
+                if (event == null) {
+                    continue;
+                }
 
                 switch (event) {
                     case InputEvent.SendMessage msg -> handleSendMessage(msg);
                     case InputEvent.ExecuteCommand cmd -> {
-                        if (handleCommand(cmd)) return;
+                        if (handleCommand(cmd)) {
+                            return;
+                        }
                     }
-                    case InputEvent.Shutdown __ -> { handleShutdown(); return; }
+                    case InputEvent.CyclePermissionMode __ -> {
+                        modeManager.cycleMode();
+                        int tokens = tokenAccumulator.getTotalInput() + tokenAccumulator.getTotalOutput();
+                        safePut(new RenderEvent.StatusUpdate(modeManager.getMode().label(), modelName, "", tokens));
+                    }
+                    case InputEvent.HitlChoice hc -> hitlCoordinator.complete(hc.choice());
+                    case InputEvent.Shutdown __ -> {
+                        handleShutdown();
+                        return;
+                    }
                 }
             }
         } catch (InterruptedException e) {
@@ -86,29 +122,25 @@ public class NetworkOrchestrator {
     }
 
     private void handleSendMessage(InputEvent.SendMessage msg) {
-        // Ignore if loop already running
-        if (currentLoop != null) return;
+        if (currentLoop != null) {
+            return;
+        }
 
         tokenAccumulator.reset();
         deltaBuffer.forceFlush();
         safePut(new RenderEvent.AddUserMessage(msg.text()));
 
-        // ch05: build stable prompt + environment info + enhanced tool defs
         String stablePrompt = SystemPromptAssembler.assemble(options.systemPrompt());
         String envInfo = EnvironmentInfoCollector.collect(modelName, APP_VERSION);
-        List<ToolDefinition> toolDefs = options.toolSystemEnabled()
-            ? ToolDescriptionEnhancer.enhance(planMode.getToolDefinitions())
-            : List.of();
+        List<ToolDefinition> toolDefs = ToolDescriptionEnhancer.enhance(
+            modeManager.getToolDefinitions(options.toolSystemEnabled()));
 
-        // Create and configure loop
         var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3);
-        loop.setConfig(config, toolDefs, stablePrompt, envInfo, planMode);
+        loop.setConfig(config, toolDefs, stablePrompt, envInfo, modeManager);
         currentLoop = loop;
 
-        // Start timer
         startTimer();
 
-        // Run loop in background thread
         final ReActLoop loopRef = loop;
         loopThread = new Thread(() -> {
             try {
@@ -124,7 +156,7 @@ public class NetworkOrchestrator {
                 loopThread = null;
                 int finalTokens = tokenAccumulator.getTotalInput() + tokenAccumulator.getTotalOutput();
                 timerScheduler.schedule(() -> safePut(
-                    new RenderEvent.StatusUpdate(providerName, modelName, "", finalTokens)),
+                    new RenderEvent.StatusUpdate(modeManager.getMode().label(), modelName, "", finalTokens)),
                     1, TimeUnit.SECONDS);
             }
         }, "lavender-react-loop");
@@ -134,7 +166,7 @@ public class NetworkOrchestrator {
     private void onAgentEvent(AgentEvent event) {
         switch (event) {
             case AgentEvent.RoundStart rs ->
-                safePut(new RenderEvent.StatusUpdate(providerName, modelName,
+                safePut(new RenderEvent.StatusUpdate(modeManager.getMode().label(), modelName,
                     "Round " + rs.round() + " …",
                     tokenAccumulator.getTotalInput() + tokenAccumulator.getTotalOutput()));
             case AgentEvent.Content c ->
@@ -155,7 +187,7 @@ public class NetworkOrchestrator {
                     trr.result().content() != null ? trr.result().content().length() : 0));
             case AgentEvent.Usage u ->
                 safePut(new RenderEvent.StatusUpdate(
-                    providerName, modelName, null,
+                    modeManager.getMode().label(), modelName, null,
                     u.inputTokens() + u.outputTokens()));
             case AgentEvent.RoundEnd re -> { /* no-op */ }
             case AgentEvent.Complete c -> {
@@ -164,7 +196,7 @@ public class NetworkOrchestrator {
                 long seconds = currentTimer != null ? currentTimer.elapsedSeconds() : 0;
                 int finalTokens = tokenAccumulator.getTotalInput() + tokenAccumulator.getTotalOutput();
                 safePut(new RenderEvent.StatusUpdate(
-                    providerName, modelName, "Done (" + seconds + "s)", finalTokens));
+                    modeManager.getMode().label(), modelName, "Done (" + seconds + "s)", finalTokens));
                 safePut(new RenderEvent.FinalizeMessage());
             }
             case AgentEvent.Stopped s -> {
@@ -196,15 +228,18 @@ public class NetworkOrchestrator {
                 if (currentLoop != null) {
                     currentLoop.cancel();
                 }
-                // If idle, ignore
             }
             case PLAN -> {
-                planMode.enterPlanMode();
+                modeManager.enterPlanMode();
+                int tokens = tokenAccumulator.getTotalInput() + tokenAccumulator.getTotalOutput();
+                safePut(new RenderEvent.StatusUpdate(modeManager.getMode().label(), modelName, "", tokens));
                 safePut(new RenderEvent.AddSystemMessage(
                     "[已进入计划模式 · 仅只读工具可用]"));
             }
             case DO -> {
-                planMode.exitToDo();
+                modeManager.exitPlanToDefault();
+                int tokens = tokenAccumulator.getTotalInput() + tokenAccumulator.getTotalOutput();
+                safePut(new RenderEvent.StatusUpdate(modeManager.getMode().label(), modelName, "", tokens));
                 safePut(new RenderEvent.AddSystemMessage(
                     "[已退出计划模式 · 所有工具可用]"));
                 handleSendMessage(new InputEvent.SendMessage("请根据以上计划开始执行"));
@@ -214,7 +249,10 @@ public class NetworkOrchestrator {
                 sessionManager.clear();
                 safePut(new RenderEvent.ClearChat());
             }
-            case EXIT, QUIT -> { handleShutdown(); return true; }
+            case EXIT, QUIT -> {
+                handleShutdown();
+                return true;
+            }
             case HELP -> {
                 deltaBuffer.forceFlush();
                 safePut(new RenderEvent.AddSystemMessage("""
@@ -226,6 +264,7 @@ public class NetworkOrchestrator {
                       /do         - Exit plan mode and execute plan
                       /cancel     - Cancel current request
                     Keyboard:
+                      Shift+Tab   - Cycle permission mode
                       ↑/↓         - Scroll one line
                       PageUp/Down - Scroll one page
                       Home/End    - Jump to top/bottom
@@ -239,7 +278,9 @@ public class NetworkOrchestrator {
             case SCROLL -> {
                 deltaBuffer.forceFlush();
                 RenderEvent se = parseScrollEvent(cmd.args());
-                if (se != null) safePut(se);
+                if (se != null) {
+                    safePut(se);
+                }
             }
         }
         return false;
@@ -250,7 +291,11 @@ public class NetworkOrchestrator {
             currentLoop.cancel();
         }
         if (loopThread != null) {
-            try { loopThread.join(1000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            try {
+                loopThread.join(1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
         stopTimer();
         deltaBuffer.clear();
@@ -269,7 +314,7 @@ public class NetworkOrchestrator {
         this.timerTask = timerScheduler.scheduleAtFixedRate(() -> {
             int tokens = tokenAccumulator.getTotalInput() + tokenAccumulator.getTotalOutput();
             safePut(new RenderEvent.StatusUpdate(
-                providerName, modelName,
+                modeManager.getMode().label(), modelName,
                 "Imagining\u2026 (" + timer.elapsedSeconds() + "s)", tokens));
         }, 1, 1, TimeUnit.SECONDS);
     }
@@ -298,7 +343,10 @@ public class NetworkOrchestrator {
     }
 
     private void safePut(RenderEvent event) {
-        try { renderQueue.put(event); }
-        catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        try {
+            renderQueue.put(event);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }

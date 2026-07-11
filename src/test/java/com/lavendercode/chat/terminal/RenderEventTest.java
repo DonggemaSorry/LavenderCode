@@ -82,7 +82,8 @@ class RenderEventTest {
     // ---- StatusUpdate ----
     @Test
     void statusUpdateShouldStoreFields() {
-        var e = new RenderEvent.StatusUpdate("claude", "claude-sonnet-4", "streaming", 1234);
+        var e = new RenderEvent.StatusUpdate("default", "claude-sonnet-4", "streaming", 1234);
+        assertThat(e.modeLabel()).isEqualTo("default");
         assertThat(e.modelName()).isEqualTo("claude-sonnet-4");
         assertThat(e.tokenCount()).isEqualTo(1234);
     }

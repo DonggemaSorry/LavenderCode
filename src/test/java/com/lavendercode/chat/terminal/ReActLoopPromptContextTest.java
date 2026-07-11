@@ -5,7 +5,10 @@ import com.lavendercode.core.config.*;
 import com.lavendercode.core.prompt.PromptContext;
 import com.lavendercode.core.provider.*;
 import com.lavendercode.core.tool.*;
+import com.lavendercode.core.permission.PermissionMode;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.io.TempDir;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -15,9 +18,12 @@ class ReActLoopPromptContextTest {
     private BatchingToolExecutor batchExecutor;
     private TokenAccumulator tokenAccumulator;
 
+    @TempDir
+    Path projectRoot;
+
     @BeforeEach void setUp() {
         sessionManager = new InMemorySessionManager();
-        batchExecutor = new BatchingToolExecutor(30, 120);
+        batchExecutor = PermissionTestSupport.bypassExecutor(30, 120, projectRoot);
         tokenAccumulator = new TokenAccumulator();
     }
 
@@ -105,7 +111,7 @@ class ReActLoopPromptContextTest {
         // Round 1: tool call, Round 2: no tools (complete)
         var provider = new CtxCaptureProvider(List.of("tool_call", "done"));
         var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3);
-        var planMode = new PlanModeManager();
+        var planMode = new PermissionModeManager(PermissionMode.DEFAULT);
         planMode.enterPlanMode();
         loop.setConfig(config(), List.of(),
             "stable", "env", planMode);
@@ -125,7 +131,7 @@ class ReActLoopPromptContextTest {
     void reminderNotInSessionHistory() {
         var provider = new CtxCaptureProvider(List.of("done"));
         var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3);
-        var planMode = new PlanModeManager();
+        var planMode = new PermissionModeManager(PermissionMode.DEFAULT);
         planMode.enterPlanMode();
         loop.setConfig(config(), List.of(), "stable", "env", planMode);
         loop.run("test", e -> {});
@@ -139,7 +145,7 @@ class ReActLoopPromptContextTest {
     @Test
     void ch04CancelStillWorks() throws Exception {
         ToolRegistry.register(new Tool() {
-            @Override public String name() { return "slow_tool"; }
+            @Override public String name() { return "read_file"; }
             @Override public String description() { return "slow"; }
             @Override public ToolParameterSchema parameters() {
                 return new ToolParameterSchema("object", Map.of(), List.of());
@@ -160,9 +166,9 @@ class ReActLoopPromptContextTest {
                                                    List<ToolDefinition> toolDefs,
                                                    PromptContext promptContext) {
                 return new SingleEventIterator(
-                    new StreamEvent.ToolCallStart("c1", "slow_tool"),
-                    new StreamEvent.ToolCallDelta("c1", "{}"),
-                    new StreamEvent.ToolCallEnd("c1", "slow_tool", Map.of()),
+                    new StreamEvent.ToolCallStart("c1", "read_file"),
+                    new StreamEvent.ToolCallDelta("c1", "{\"path\":\"a\"}"),
+                    new StreamEvent.ToolCallEnd("c1", "read_file", Map.of("path", "a")),
                     new StreamEvent.Usage(10, 5, 0, 0),
                     new StreamEvent.StreamComplete());
             }
@@ -178,7 +184,7 @@ class ReActLoopPromptContextTest {
         };
 
         var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3);
-        loop.setConfig(config(), List.of(), "stable", "env", new PlanModeManager());
+        loop.setConfig(config(), List.of(), "stable", "env", new PermissionModeManager(PermissionMode.DEFAULT));
         List<AgentEvent> events = new ArrayList<>();
 
         Thread runThread = new Thread(() -> loop.run("test", events::add));
@@ -199,7 +205,7 @@ class ReActLoopPromptContextTest {
             }
         };
         var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3);
-        loop.setConfig(config(), List.of(), "stable", "env", new PlanModeManager());
+        loop.setConfig(config(), List.of(), "stable", "env", new PermissionModeManager(PermissionMode.DEFAULT));
         List<AgentEvent> events = new ArrayList<>();
         loop.run("test", events::add);
         assertThat(events).anyMatch(e -> e instanceof AgentEvent.Error);
@@ -235,7 +241,7 @@ class ReActLoopPromptContextTest {
         ));
 
         var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3);
-        loop.setConfig(config(), List.of(), "stable", "env", new PlanModeManager());
+        loop.setConfig(config(), List.of(), "stable", "env", new PermissionModeManager(PermissionMode.DEFAULT));
         List<AgentEvent> events = new ArrayList<>();
         loop.run("test", events::add);
 
@@ -280,7 +286,7 @@ class ReActLoopPromptContextTest {
         ));
 
         var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3);
-        var planMode = new PlanModeManager();
+        var planMode = new PermissionModeManager(PermissionMode.DEFAULT);
         planMode.enterPlanMode();
         loop.setConfig(config(), List.of(), "stable", "env", planMode);
         List<AgentEvent> events = new ArrayList<>();
@@ -310,7 +316,7 @@ class ReActLoopPromptContextTest {
             }
         };
         var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3);
-        loop.setConfig(config(), List.of(), "stable", "env", new PlanModeManager());
+        loop.setConfig(config(), List.of(), "stable", "env", new PermissionModeManager(PermissionMode.DEFAULT));
         List<AgentEvent> events = new ArrayList<>();
         loop.run("test", events::add);
         assertThat(events).anyMatch(e -> e instanceof AgentEvent.Complete);

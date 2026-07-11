@@ -25,7 +25,7 @@ public class ReActLoop {
     private LlmConfig config = null;
     private String stablePrompt;
     private String environmentInfo;
-    private PlanModeManager planMode;
+    private PermissionModeManager modeManager;
 
     public ReActLoop(LlmProvider provider, SessionManager sessionManager,
                      BatchingToolExecutor batchExecutor, TokenAccumulator tokenAccumulator,
@@ -45,12 +45,12 @@ public class ReActLoop {
 
     public void setConfig(LlmConfig config, List<ToolDefinition> toolDefs,
                           String stablePrompt, String environmentInfo,
-                          PlanModeManager planMode) {
+                          PermissionModeManager modeManager) {
         this.config = config;
         this.toolDefs = toolDefs != null ? toolDefs : List.of();
         this.stablePrompt = stablePrompt;
         this.environmentInfo = environmentInfo;
-        this.planMode = planMode;
+        this.modeManager = modeManager;
     }
 
     public void cancel() { cancelFlag.set(true); }
@@ -69,7 +69,7 @@ public class ReActLoop {
             PromptContext promptCtx = null;
             if (stablePrompt != null) {
                 Optional<String> reminder = ReminderInjector.inject(
-                    iteration, planMode != null && planMode.isPlanMode());
+                    iteration, modeManager != null && modeManager.isPlanMode());
                 promptCtx = new PromptContext(stablePrompt, environmentInfo,
                     reminder.map(List::of).orElse(List.of()));
             }

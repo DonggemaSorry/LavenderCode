@@ -18,4 +18,10 @@ sealed interface TerminalInput {
 
     /** Standalone Esc key press (not part of a CSI/SS3 sequence). */
     record Escape() implements TerminalInput {}
+
+    enum SpecialKey {
+        SHIFT_TAB
+    }
+
+    record Special(SpecialKey key) implements TerminalInput {}
 }
