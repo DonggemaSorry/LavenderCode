@@ -1,6 +1,8 @@
 package com.lavendercode.core.permission;
 
+import com.lavendercode.core.tool.Tool;
 import com.lavendercode.core.tool.ToolCall;
+import com.lavendercode.core.tool.ToolRegistry;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -22,26 +24,30 @@ public final class ToolMetadata {
     public static ToolCallContext from(ToolCall call, Path projectRoot) {
         String registryName = call.name();
         String friendlyName = REGISTRY_TO_FRIENDLY.getOrDefault(registryName, registryName);
-        boolean parseFailed = call.parseError() != null || !REGISTRY_TO_FRIENDLY.containsKey(registryName);
+        boolean parseFailed = call.parseError() != null;
 
         ToolCategory category = categoryFor(registryName);
         String matchKey = "";
         List<Path> sandboxPaths = new ArrayList<>();
 
         if (!parseFailed) {
-            switch (registryName) {
-                case "execute_command" -> matchKey = stringParam(call.parameters(), "command");
-                case "read_file", "write_file", "edit_file" -> {
-                    String pathStr = stringParam(call.parameters(), "path");
-                    matchKey = toProjectRelativePath(pathStr, projectRoot);
-                    sandboxPaths.add(resolvePath(pathStr, projectRoot));
+            if (REGISTRY_TO_FRIENDLY.containsKey(registryName)) {
+                switch (registryName) {
+                    case "execute_command" -> matchKey = stringParam(call.parameters(), "command");
+                    case "read_file", "write_file", "edit_file" -> {
+                        String pathStr = stringParam(call.parameters(), "path");
+                        matchKey = toProjectRelativePath(pathStr, projectRoot);
+                        sandboxPaths.add(resolvePath(pathStr, projectRoot));
+                    }
+                    case "search_file", "search_content" -> {
+                        String dir = stringParamOrDefault(call.parameters(), "directory", ".");
+                        matchKey = toProjectRelativePath(dir, projectRoot);
+                        sandboxPaths.add(resolvePath(dir, projectRoot));
+                    }
+                    default -> parseFailed = true;
                 }
-                case "search_file", "search_content" -> {
-                    String dir = stringParamOrDefault(call.parameters(), "directory", ".");
-                    matchKey = toProjectRelativePath(dir, projectRoot);
-                    sandboxPaths.add(resolvePath(dir, projectRoot));
-                }
-                default -> parseFailed = true;
+            } else if (!registryName.startsWith("mcp__")) {
+                parseFailed = true;
             }
         }
 
@@ -60,7 +66,14 @@ public final class ToolMetadata {
         return switch (registryName) {
             case "read_file", "search_file", "search_content" -> ToolCategory.READ_ONLY;
             case "write_file", "edit_file" -> ToolCategory.FILE_WRITE;
-            default -> ToolCategory.COMMAND;
+            case "execute_command" -> ToolCategory.COMMAND;
+            default -> {
+                Tool tool = ToolRegistry.get(registryName);
+                if (tool != null && tool.isReadOnly()) {
+                    yield ToolCategory.READ_ONLY;
+                }
+                yield ToolCategory.COMMAND;
+            }
         };
     }
 

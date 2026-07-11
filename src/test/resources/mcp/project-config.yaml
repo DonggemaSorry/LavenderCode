@@ -1,0 +1,10 @@
+mcp_servers:
+  shared:
+    type: stdio
+    command: echo
+    args: ["project"]
+  api:
+    type: http
+    url: "https://example.com/mcp"
+    headers:
+      Authorization: "Bearer ${API_TOKEN}"

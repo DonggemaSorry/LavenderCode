@@ -9,6 +9,9 @@ import com.lavendercode.core.config.ConfigLoader;
 import com.lavendercode.core.config.LlmConfig;
 import com.lavendercode.core.config.Options;
 import com.lavendercode.core.config.ProviderConfig;
+import com.lavendercode.core.mcp.McpBootstrap;
+import com.lavendercode.core.mcp.McpSessionManager;
+import com.lavendercode.core.mcp.McpShutdownHook;
 import com.lavendercode.core.provider.LlmProvider;
 import com.lavendercode.core.provider.ProviderRegistry;
 import com.lavendercode.core.tool.*;
@@ -69,15 +72,24 @@ public class LavenderCode {
             ToolRegistry.register(new GrepTool(opts.searchMaxResults()));
         }
 
-        LlmProvider provider = ProviderRegistry.get(selectedProvider.protocol());
-        SessionManager sessionManager = new InMemorySessionManager();
+        Path projectRoot = Path.of("").toAbsolutePath().normalize();
+        McpSessionManager mcpSessions = new McpSessionManager();
+        McpShutdownHook.register(mcpSessions);
+        try {
+            McpBootstrap.discoverAndRegister(projectRoot, mcpSessions);
 
-        TerminalChatApplication app = new TerminalChatApplication(
-            sessionManager, provider,
-            providerName, selectedProvider.model(), config,
-            Theme.dark(),
-            Path.of("").toAbsolutePath().normalize()
-        );
-        app.run(terminal);
+            LlmProvider provider = ProviderRegistry.get(selectedProvider.protocol());
+            SessionManager sessionManager = new InMemorySessionManager();
+
+            TerminalChatApplication app = new TerminalChatApplication(
+                sessionManager, provider,
+                providerName, selectedProvider.model(), config,
+                Theme.dark(),
+                projectRoot
+            );
+            app.run(terminal);
+        } finally {
+            McpShutdownHook.closeAll(mcpSessions);
+        }
     }
 }

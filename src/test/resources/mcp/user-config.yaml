@@ -1,0 +1,11 @@
+mcp_servers:
+  shared:
+    type: stdio
+    command: echo
+    args: ["user"]
+  github:
+    type: stdio
+    command: npx
+    args: ["-y", "github-user"]
+    env:
+      TOKEN: "${GITHUB_TOKEN}"
