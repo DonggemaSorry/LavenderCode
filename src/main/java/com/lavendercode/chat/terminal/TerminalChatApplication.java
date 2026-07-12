@@ -6,6 +6,7 @@ import com.lavendercode.core.context.ContextManager;
 import com.lavendercode.core.provider.LlmProvider;
 import org.jline.terminal.Terminal;
 
+import java.io.Closeable;
 import java.nio.file.Path;
 import java.util.concurrent.*;
 
@@ -22,6 +23,7 @@ public class TerminalChatApplication {
     private final Theme theme;
     private final Path projectRoot;
     private final ContextManager contextManager;
+    private final Closeable closeOnShutdown;
 
     public TerminalChatApplication(SessionManager sessionManager,
                                    LlmProvider provider,
@@ -31,7 +33,7 @@ public class TerminalChatApplication {
                                    Theme theme,
                                    Path projectRoot) {
         this(sessionManager, provider, providerName, modelName, config, theme, projectRoot,
-            com.lavendercode.core.context.NoOpContextManager.INSTANCE);
+            com.lavendercode.core.context.NoOpContextManager.INSTANCE, null);
     }
 
     public TerminalChatApplication(SessionManager sessionManager,
@@ -42,6 +44,18 @@ public class TerminalChatApplication {
                                    Theme theme,
                                    Path projectRoot,
                                    ContextManager contextManager) {
+        this(sessionManager, provider, providerName, modelName, config, theme, projectRoot, contextManager, null);
+    }
+
+    public TerminalChatApplication(SessionManager sessionManager,
+                                   LlmProvider provider,
+                                   String providerName,
+                                   String modelName,
+                                   LlmConfig config,
+                                   Theme theme,
+                                   Path projectRoot,
+                                   ContextManager contextManager,
+                                   Closeable closeOnShutdown) {
         this.sessionManager = sessionManager;
         this.provider = provider;
         this.providerName = providerName;
@@ -50,6 +64,7 @@ public class TerminalChatApplication {
         this.theme = theme;
         this.projectRoot = projectRoot;
         this.contextManager = contextManager != null ? contextManager : com.lavendercode.core.context.NoOpContextManager.INSTANCE;
+        this.closeOnShutdown = closeOnShutdown;
     }
 
     public TerminalChatApplication(SessionManager sessionManager,
@@ -96,14 +111,20 @@ public class TerminalChatApplication {
             try { renderQueue.put(new RenderEvent.Shutdown()); } catch (InterruptedException ignored) {}
         }));
 
-        inputThread.start();
-        networkThread.start();
-        renderThread.start();
+        try {
+            inputThread.start();
+            networkThread.start();
+            renderThread.start();
 
-        // Wait for render thread to finish (it exits on Shutdown event)
-        renderThread.join();
-
-        shutdownWorkers(inputSystem, inputQueue, inputThread, networkThread, timerScheduler, provider);
+            // Wait for render thread to finish (it exits on Shutdown event)
+            renderThread.join();
+        } finally {
+            try {
+                shutdownWorkers(inputSystem, inputQueue, inputThread, networkThread, timerScheduler, provider);
+            } finally {
+                closeQuietly(closeOnShutdown);
+            }
+        }
     }
 
     private static void shutdownWorkers(InputSystem inputSystem,
@@ -125,6 +146,17 @@ public class TerminalChatApplication {
             provider.close();
         } catch (Exception ignored) {
             // Provider cleanup is best-effort during shutdown
+        }
+    }
+
+    private static void closeQuietly(Closeable closeable) {
+        if (closeable == null) {
+            return;
+        }
+        try {
+            closeable.close();
+        } catch (Exception ignored) {
+            // Shutdown cleanup is best-effort.
         }
     }
 }

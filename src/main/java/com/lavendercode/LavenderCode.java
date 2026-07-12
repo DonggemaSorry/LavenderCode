@@ -1,7 +1,9 @@
 package com.lavendercode;
 
 import com.lavendercode.chat.session.InMemorySessionManager;
+import com.lavendercode.chat.session.PersistingSessionManager;
 import com.lavendercode.chat.session.SessionManager;
+import com.lavendercode.chat.session.SessionTranscriptWriter;
 import com.lavendercode.chat.terminal.ProviderSelector;
 import com.lavendercode.chat.terminal.TerminalChatApplication;
 import com.lavendercode.chat.terminal.Theme;
@@ -82,9 +84,11 @@ public class LavenderCode {
             McpBootstrap.discoverAndRegister(projectRoot, mcpSessions);
 
             LlmProvider provider = ProviderRegistry.get(selectedProvider.protocol());
-            SessionManager sessionManager = new InMemorySessionManager();
+            SessionManager inner = new InMemorySessionManager();
             SessionHandle handle = ContextBootstrap.create(
-                projectRoot, selectedProvider, sessionManager, provider, config, null);
+                projectRoot, selectedProvider, inner, provider, config, null);
+            SessionTranscriptWriter writer = SessionTranscriptWriter.open(handle.paths().conversationJsonl());
+            SessionManager sessionManager = new PersistingSessionManager(inner, writer, selectedProvider.model());
             ContextManager contextManager = handle.contextManager();
 
             TerminalChatApplication app = new TerminalChatApplication(
@@ -92,7 +96,8 @@ public class LavenderCode {
                 providerName, selectedProvider.model(), config,
                 Theme.dark(),
                 projectRoot,
-                contextManager
+                contextManager,
+                writer
             );
             app.run(terminal);
         } finally {
