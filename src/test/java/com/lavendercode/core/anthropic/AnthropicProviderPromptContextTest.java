@@ -29,7 +29,7 @@ class AnthropicProviderPromptContextTest {
 
     private LlmConfig config(String baseUrl) {
         return new LlmConfig(
-            List.of(new ProviderConfig("anthropic", "anthropic", "claude-sonnet-4-20250514",
+            List.of(ProviderConfig.of("anthropic", "anthropic", "claude-sonnet-4-20250514",
                 baseUrl, "sk-ant-test", new ThinkingConfig(false, 0))),
             new Options(4096, ""));
     }

@@ -56,6 +56,27 @@ public class InMemorySessionManager implements SessionManager {
     }
 
     @Override
+    public void replaceHistory(List<Message> newMessages) {
+        messages.clear();
+        messages.addAll(newMessages);
+    }
+
+    @Override
+    public void updateToolContent(String toolCallId, String newContent) {
+        for (int i = 0; i < messages.size(); i++) {
+            Message m = messages.get(i);
+            if (m.role() == Role.TOOL && toolCallId.equals(m.toolCallId())) {
+                ToolResult old = m.toolResults().get(0);
+                ToolResult updated = new ToolResult(
+                    old.success(), old.summary(), newContent,
+                    old.errorCategory(), old.errorDetail(), old.truncationInfo());
+                messages.set(i, Message.toolResult(toolCallId, updated));
+                return;
+            }
+        }
+    }
+
+    @Override
     public int getMessageCount() {
         return messages.size();
     }

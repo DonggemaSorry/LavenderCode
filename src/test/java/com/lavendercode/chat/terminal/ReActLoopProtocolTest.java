@@ -69,7 +69,7 @@ class ReActLoopProtocolTest {
         var session = new InMemorySessionManager();
         var batchExec = PermissionTestSupport.bypassExecutor(30, 120, projectRoot);
         var tokens = new TokenAccumulator();
-        var loop = new ReActLoop(provider, session, batchExec, tokens, 10, 3);
+        var loop = new ReActLoop(provider, session, batchExec, tokens, 10, 3, com.lavendercode.core.context.NoOpContextManager.INSTANCE);
         List<AgentEvent> events = new ArrayList<>();
         loop.run("test", events::add);
         return events;

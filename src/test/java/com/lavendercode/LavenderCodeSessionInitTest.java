@@ -1,0 +1,36 @@
+package com.lavendercode;
+
+import com.lavendercode.chat.session.InMemorySessionManager;
+import com.lavendercode.core.config.LlmConfig;
+import com.lavendercode.core.config.Options;
+import com.lavendercode.core.config.ProviderConfig;
+import com.lavendercode.core.context.ContextBootstrap;
+import com.lavendercode.core.context.ContextManager;
+import com.lavendercode.core.provider.LlmProvider;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+class LavenderCodeSessionInitTest {
+    @Test
+    void createsSessionDirectory(@TempDir Path projectRoot) throws Exception {
+        ProviderConfig providerConfig = ProviderConfig.of("openai", "openai", "gpt-4", "http://localhost", "key", null);
+        LlmConfig config = new LlmConfig(List.of(providerConfig), new Options());
+        LlmProvider provider = mock(LlmProvider.class);
+        when(provider.protocol()).thenReturn("openai");
+
+        ContextManager ctx = ContextBootstrap.create(
+            projectRoot, providerConfig, new InMemorySessionManager(), provider, config, null);
+
+        assertThat(ctx).isNotNull();
+        assertThat(Files.exists(projectRoot.resolve(".lavendercode/sessions"))).isTrue();
+        try (var stream = Files.list(projectRoot.resolve(".lavendercode/sessions"))) {
+            assertThat(stream.findAny()).isPresent();
+        }
+    }
+}

@@ -23,11 +23,20 @@ public record ProviderConfig(
     String apiKey,
 
     @JsonProperty("thinking")
-    ThinkingConfig thinking
+    ThinkingConfig thinking,
+
+    @JsonProperty("context_window")
+    Integer contextWindow
 ) {
     public ProviderConfig {
         if (thinking == null) {
             thinking = new ThinkingConfig();
         }
+    }
+
+    /** Backward-compatible factory without context_window. */
+    public static ProviderConfig of(String name, String protocol, String model,
+                                    String baseUrl, String apiKey, ThinkingConfig thinking) {
+        return new ProviderConfig(name, protocol, model, baseUrl, apiKey, thinking, null);
     }
 }

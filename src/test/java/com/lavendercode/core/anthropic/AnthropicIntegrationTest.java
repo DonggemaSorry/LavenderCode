@@ -29,7 +29,7 @@ class AnthropicIntegrationTest {
 
         provider = new AnthropicProvider();
         config = new LlmConfig(
-            List.of(new ProviderConfig("anthropic", "anthropic", "claude-sonnet-4", baseUrl, "test-key", new ThinkingConfig(false, 0))),
+            List.of(ProviderConfig.of("anthropic", "anthropic", "claude-sonnet-4", baseUrl, "test-key", new ThinkingConfig(false, 0))),
             new Options(1024, "You are helpful.")
         );
         history = List.of(new Message(Role.USER, "What is 2+2?"));

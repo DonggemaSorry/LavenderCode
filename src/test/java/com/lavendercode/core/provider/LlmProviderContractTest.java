@@ -29,7 +29,7 @@ abstract class LlmProviderContractTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         config = new LlmConfig(
-            List.of(new ProviderConfig(provider().protocol(), provider().protocol(), validModel(), baseUrl, "test-key", null)),
+            List.of(ProviderConfig.of(provider().protocol(), provider().protocol(), validModel(), baseUrl, "test-key", null)),
             new Options(1024, "You are helpful.")
         );
         history = List.of(new Message(Role.USER, "Hello"));

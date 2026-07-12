@@ -3,10 +3,12 @@ package com.lavendercode.chat.terminal;
 import com.lavendercode.chat.session.SessionManager;
 import com.lavendercode.core.config.LlmConfig;
 import com.lavendercode.core.config.Options;
+import com.lavendercode.core.context.CompactTrigger;
+import com.lavendercode.core.context.ContextEvent;
+import com.lavendercode.core.context.ContextManager;
 import com.lavendercode.core.permission.*;
 import com.lavendercode.core.provider.LlmProvider;
 import com.lavendercode.core.tool.ToolDefinition;
-import com.lavendercode.core.tool.ToolResult;
 import com.lavendercode.core.prompt.SystemPromptAssembler;
 import com.lavendercode.core.prompt.EnvironmentInfoCollector;
 import com.lavendercode.core.prompt.ToolDescriptionEnhancer;
@@ -15,10 +17,12 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
 public class NetworkOrchestrator {
@@ -30,18 +34,18 @@ public class NetworkOrchestrator {
     private final BlockingQueue<InputEvent> inputQueue;
     private final SessionManager sessionManager;
     private final LlmProvider provider;
-    private final String providerName;
     private final String modelName;
     private final LlmConfig config;
     private final Options options;
     private final ScheduledExecutorService timerScheduler;
-    private final Path projectRoot;
 
     private final BatchingToolExecutor batchExecutor;
     private final TokenAccumulator tokenAccumulator = new TokenAccumulator();
     private final PermissionModeManager modeManager;
     private final HitlCoordinator hitlCoordinator;
     private final PermissionPipeline permissionPipeline;
+    private final ContextManager contextManager;
+    private final ReentrantLock sessionLock = new ReentrantLock();
 
     private volatile ReActLoop currentLoop;
     private volatile Thread loopThread;
@@ -55,17 +59,28 @@ public class NetworkOrchestrator {
                                String providerName, String modelName, LlmConfig config,
                                ScheduledExecutorService timerScheduler,
                                Path projectRoot) {
+        this(deltaBuffer, renderQueue, inputQueue, sessionManager, provider,
+            providerName, modelName, config, timerScheduler, projectRoot,
+            com.lavendercode.core.context.NoOpContextManager.INSTANCE);
+    }
+
+    public NetworkOrchestrator(DeltaBuffer deltaBuffer,
+                               BlockingQueue<RenderEvent> renderQueue,
+                               BlockingQueue<InputEvent> inputQueue,
+                               SessionManager sessionManager, LlmProvider provider,
+                               String providerName, String modelName, LlmConfig config,
+                               ScheduledExecutorService timerScheduler,
+                               Path projectRoot,
+                               ContextManager contextManager) {
         this.deltaBuffer = deltaBuffer;
         this.renderQueue = renderQueue;
         this.inputQueue = inputQueue;
         this.sessionManager = sessionManager;
         this.provider = provider;
-        this.providerName = providerName;
         this.modelName = modelName;
         this.config = config;
         this.options = config.options();
         this.timerScheduler = timerScheduler;
-        this.projectRoot = projectRoot;
 
         PermissionConfig permConfig = PermissionConfigLoader.load(
             projectRoot,
@@ -82,6 +97,20 @@ public class NetworkOrchestrator {
             options.commandTimeoutSeconds(),
             permissionPipeline,
             projectRoot);
+        this.contextManager = contextManager != null ? contextManager : com.lavendercode.core.context.NoOpContextManager.INSTANCE;
+        this.contextManager.setEventSink(this::onContextEvent);
+    }
+
+    private void onContextEvent(ContextEvent event) {
+        switch (event) {
+            case ContextEvent.Compacting c ->
+                safePut(new RenderEvent.AddSystemMessage("[" + c.message() + "]"));
+            case ContextEvent.Compacted c ->
+                safePut(new RenderEvent.AddSystemMessage(
+                    "[已压缩,token 从 " + c.tokensBefore() + " 降至 " + c.tokensAfter() + "]"));
+            case ContextEvent.CompactFailed f ->
+                safePut(new RenderEvent.AddSystemMessage("[压缩失败: " + f.reason() + "]"));
+        }
     }
 
     public HitlCoordinator hitlCoordinator() {
@@ -135,7 +164,7 @@ public class NetworkOrchestrator {
         List<ToolDefinition> toolDefs = ToolDescriptionEnhancer.enhance(
             modeManager.getToolDefinitions(options.toolSystemEnabled()));
 
-        var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3);
+        var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3, contextManager);
         loop.setConfig(config, toolDefs, stablePrompt, envInfo, modeManager);
         currentLoop = loop;
 
@@ -143,6 +172,7 @@ public class NetworkOrchestrator {
 
         final ReActLoop loopRef = loop;
         loopThread = new Thread(() -> {
+            sessionLock.lock();
             try {
                 loopRef.run(msg.text(), NetworkOrchestrator.this::onAgentEvent);
             } catch (Exception e) {
@@ -154,10 +184,13 @@ public class NetworkOrchestrator {
                 stopTimer();
                 currentLoop = null;
                 loopThread = null;
-                int finalTokens = tokenAccumulator.getTotalInput() + tokenAccumulator.getTotalOutput();
-                timerScheduler.schedule(() -> safePut(
-                    new RenderEvent.StatusUpdate(modeManager.getMode().label(), modelName, "", finalTokens)),
-                    1, TimeUnit.SECONDS);
+                sessionLock.unlock();
+                if (!timerScheduler.isShutdown()) {
+                    int finalTokens = tokenAccumulator.getTotalInput() + tokenAccumulator.getTotalOutput();
+                    timerScheduler.schedule(() -> safePut(
+                        new RenderEvent.StatusUpdate(modeManager.getMode().label(), modelName, "", finalTokens)),
+                        1, TimeUnit.SECONDS);
+                }
             }
         }, "lavender-react-loop");
         loopThread.start();
@@ -255,25 +288,13 @@ public class NetworkOrchestrator {
             }
             case HELP -> {
                 deltaBuffer.forceFlush();
-                safePut(new RenderEvent.AddSystemMessage("""
-                    Commands:
-                      /exit       - Exit LavenderCode
-                      /clear      - Clear conversation history
-                      /help       - Show this help
-                      /plan       - Enter plan mode (read-only tools only)
-                      /do         - Exit plan mode and execute plan
-                      /cancel     - Cancel current request
-                    Keyboard:
-                      Shift+Tab   - Cycle permission mode
-                      ↑/↓         - Scroll one line
-                      PageUp/Down - Scroll one page
-                      Home/End    - Jump to top/bottom
-                      Mouse wheel - Scroll message area
-                      Esc         - Cancel current request (don't exit)
-                      Ctrl+C      - Exit LavenderCode
-                      Ctrl+D (empty) - Exit
-                      Enter       - Send message
-                      Ctrl+J      - Insert newline"""));
+                safePut(new RenderEvent.AddSystemMessage(BuiltinCommandRegistry.helpText()));
+            }
+            case COMPACT -> handleCompact();
+            case UNKNOWN -> {
+                deltaBuffer.forceFlush();
+                safePut(new RenderEvent.AddSystemMessage("[" + cmd.args() + "]"));
+                safePut(new RenderEvent.FinalizeMessage());
             }
             case SCROLL -> {
                 deltaBuffer.forceFlush();
@@ -284,6 +305,24 @@ public class NetworkOrchestrator {
             }
         }
         return false;
+    }
+
+    private void handleCompact() {
+        sessionLock.lock();
+        try {
+            List<ToolDefinition> toolDefs = ToolDescriptionEnhancer.enhance(
+                modeManager.getToolDefinitions(options.toolSystemEnabled()));
+            var result = contextManager.runCompaction(CompactTrigger.MANUAL, toolDefs);
+            if (result.success()) {
+                safePut(new RenderEvent.AddSystemMessage(
+                    "[手动压缩完成: " + result.tokensBefore() + " → " + result.tokensAfter() + " tokens]"));
+            } else if (result.error() != null) {
+                safePut(new RenderEvent.AddSystemMessage("[压缩失败: " + result.error() + "]"));
+            }
+            safePut(new RenderEvent.FinalizeMessage());
+        } finally {
+            sessionLock.unlock();
+        }
     }
 
     private void handleShutdown() {
@@ -308,15 +347,22 @@ public class NetworkOrchestrator {
     }
 
     private void startTimer() {
+        if (timerScheduler.isShutdown()) {
+            return;
+        }
         final ResponseTimer timer = new ResponseTimer();
         timer.start();
         this.currentTimer = timer;
-        this.timerTask = timerScheduler.scheduleAtFixedRate(() -> {
-            int tokens = tokenAccumulator.getTotalInput() + tokenAccumulator.getTotalOutput();
-            safePut(new RenderEvent.StatusUpdate(
-                modeManager.getMode().label(), modelName,
-                "Imagining\u2026 (" + timer.elapsedSeconds() + "s)", tokens));
-        }, 1, 1, TimeUnit.SECONDS);
+        try {
+            this.timerTask = timerScheduler.scheduleAtFixedRate(() -> {
+                int tokens = tokenAccumulator.getTotalInput() + tokenAccumulator.getTotalOutput();
+                safePut(new RenderEvent.StatusUpdate(
+                    modeManager.getMode().label(), modelName,
+                    "Imagining\u2026 (" + timer.elapsedSeconds() + "s)", tokens));
+            }, 1, 1, TimeUnit.SECONDS);
+        } catch (RejectedExecutionException ignored) {
+            // Scheduler may already be shut down during test teardown
+        }
     }
 
     private void stopTimer() {

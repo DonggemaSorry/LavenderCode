@@ -257,28 +257,13 @@ public class InputSystem {
     }
 
     private InputEvent parseCommand(String input) {
-        String line = input.toLowerCase();
-        if (line.equals("/exit") || line.equals("/quit")) {
-            return new InputEvent.ExecuteCommand(InputEvent.CommandType.EXIT, "");
-        }
-        if (line.equals("/clear")) {
-            return new InputEvent.ExecuteCommand(InputEvent.CommandType.CLEAR, "");
-        }
-        if (line.equals("/help")) {
-            return new InputEvent.ExecuteCommand(InputEvent.CommandType.HELP, "");
-        }
-        if (line.startsWith("/scroll")) {
+        if (input.toLowerCase().startsWith("/scroll")) {
             return new InputEvent.ExecuteCommand(InputEvent.CommandType.SCROLL, input.substring(8).trim());
         }
-        if (line.equals("/cancel")) {
-            return new InputEvent.ExecuteCommand(InputEvent.CommandType.CANCEL, "");
+        BuiltinCommandRegistry.ParseResult r = BuiltinCommandRegistry.parse(input);
+        if (r.type() == InputEvent.CommandType.UNKNOWN) {
+            return new InputEvent.ExecuteCommand(InputEvent.CommandType.UNKNOWN, r.hint());
         }
-        if (line.equals("/plan")) {
-            return new InputEvent.ExecuteCommand(InputEvent.CommandType.PLAN, "");
-        }
-        if (line.equals("/do")) {
-            return new InputEvent.ExecuteCommand(InputEvent.CommandType.DO, "");
-        }
-        return new InputEvent.ExecuteCommand(InputEvent.CommandType.HELP, "");
+        return new InputEvent.ExecuteCommand(r.type(), r.args());
     }
 }

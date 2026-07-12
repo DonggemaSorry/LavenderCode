@@ -26,7 +26,7 @@ class OpenAIProviderPromptContextTest {
 
     private LlmConfig config(String baseUrl) {
         return new LlmConfig(
-            List.of(new ProviderConfig("openai", "openai", "gpt-4o", baseUrl, "sk-test", null)),
+            List.of(ProviderConfig.of("openai", "openai", "gpt-4o", baseUrl, "sk-test", null)),
             new Options(4096, ""));
     }
 

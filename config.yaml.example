@@ -7,6 +7,7 @@ providers:
     thinking:
       enabled: false
       budget_tokens: 4000
+    context_window: 200000   # optional; omit for protocol default
 
 options:
   max_tokens: 4096

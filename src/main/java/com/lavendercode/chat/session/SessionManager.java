@@ -12,6 +12,8 @@ public interface SessionManager {
     void addToolMessages(List<ToolCall> toolCalls, List<ToolResult> toolResults);
     /** Removes the last N messages from history (for rolling back failed re-injection). */
     void removeLastMessages(int count);
+    void replaceHistory(List<Message> messages);
+    void updateToolContent(String toolCallId, String newContent);
     List<Message> getHistory();
     void clear();
     int getMessageCount();
