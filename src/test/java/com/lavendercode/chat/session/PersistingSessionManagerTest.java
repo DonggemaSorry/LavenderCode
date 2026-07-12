@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lavendercode.core.provider.Message;
 import com.lavendercode.core.provider.Role;
+import com.lavendercode.core.tool.ToolCall;
 import com.lavendercode.core.tool.ToolResult;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -65,6 +67,27 @@ class PersistingSessionManagerTest {
         assertThat(lines.get(2).get("role").asText()).isEqualTo("assistant");
         assertThat(lines.get(2).get("content").asText()).isEqualTo("kept answer");
         assertThat(lines.get(2).has("model")).isFalse();
+    }
+
+    @Test
+    void addToolMessagesPersistsAssistantToolCallsAndToolCallId() throws Exception {
+        Path file = dir.resolve("conversation.jsonl");
+        SessionManager manager = manager(file);
+
+        manager.addToolMessages(
+            List.of(new ToolCall("call-1", "read_file", Map.of("path", "README.md"))),
+            List.of(ToolResult.success("read", "content"))
+        );
+
+        List<JsonNode> lines = jsonLines(file);
+        assertThat(lines).hasSize(2);
+        assertThat(lines.get(0).get("role").asText()).isEqualTo("assistant");
+        assertThat(lines.get(0).get("tool_calls")).hasSize(1);
+        assertThat(lines.get(0).get("tool_calls").get(0).get("id").asText()).isEqualTo("call-1");
+        assertThat(lines.get(1).get("role").asText()).isEqualTo("tool");
+        assertThat(lines.get(1).get("tool_call_id").asText()).isEqualTo("call-1");
+        assertThat(lines.get(1).get("tool_results")).hasSize(1);
+        assertThat(lines.get(1).get("tool_results").get(0).get("content").asText()).isEqualTo("content");
     }
 
     @Test
