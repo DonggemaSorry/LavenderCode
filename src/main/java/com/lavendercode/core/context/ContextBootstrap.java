@@ -11,21 +11,22 @@ import java.util.function.Consumer;
 public final class ContextBootstrap {
     private ContextBootstrap() {}
 
-    public static ContextManager create(Path projectRoot,
-                                        ProviderConfig providerConfig,
-                                        SessionManager sessionManager,
-                                        LlmProvider llmProvider,
-                                        LlmConfig llmConfig,
-                                        Consumer<ContextEvent> eventSink) throws IOException {
+    public static SessionHandle create(Path projectRoot,
+                                       ProviderConfig providerConfig,
+                                       SessionManager sessionManager,
+                                       LlmProvider llmProvider,
+                                       LlmConfig llmConfig,
+                                       Consumer<ContextEvent> eventSink) throws IOException {
         String sessionId = SessionIdGenerator.generate();
         SessionPaths paths = new SessionPaths(projectRoot, sessionId);
         paths.ensureDirectories();
+        SessionHandle handle = new SessionHandle(projectRoot, sessionId, paths, null);
 
         int contextWindow = ContextWindowDefaults.resolve(
             providerConfig.protocol(), providerConfig.contextWindow());
 
         ReplacementLedger ledger = new ReplacementLedger();
-        Layer1Offloader layer1 = new Layer1Offloader(sessionManager, paths, ledger);
+        Layer1Offloader layer1 = new Layer1Offloader(sessionManager, handle::paths, ledger);
         TokenEstimator tokenEstimator = new TokenEstimator();
         FileReadTracker fileReadTracker = new FileReadTracker();
         AutoCompactCircuitBreaker circuitBreaker = new AutoCompactCircuitBreaker();
@@ -38,6 +39,7 @@ public final class ContextBootstrap {
             sessionManager, layer1, compactionService, tokenEstimator,
             fileReadTracker, contextWindow, circuitBreaker);
         manager.setEventSink(eventSink);
-        return manager;
+        handle.setContextManager(manager);
+        return handle;
     }
 }

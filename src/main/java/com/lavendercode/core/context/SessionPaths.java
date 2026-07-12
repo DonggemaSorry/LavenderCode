@@ -21,6 +21,14 @@ public final class SessionPaths {
         return toolResultsDir;
     }
 
+    public Path sessionRoot() {
+        return sessionRoot;
+    }
+
+    public Path conversationJsonl() {
+        return sessionRoot.resolve("conversation.jsonl");
+    }
+
     public void ensureDirectories() throws IOException {
         Files.createDirectories(toolResultsDir);
     }

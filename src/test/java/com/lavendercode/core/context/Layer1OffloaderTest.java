@@ -24,7 +24,7 @@ class Layer1OffloaderTest {
 
         SessionPaths paths = new SessionPaths(projectRoot, "sess1");
         ReplacementLedger ledger = new ReplacementLedger();
-        Layer1Offloader offloader = new Layer1Offloader(sm, paths, ledger);
+        Layer1Offloader offloader = new Layer1Offloader(sm, () -> paths, ledger);
 
         int replaced = offloader.offloadAndSnip();
         assertThat(replaced).isEqualTo(1);
@@ -59,7 +59,7 @@ class Layer1OffloaderTest {
 
         SessionPaths paths = new SessionPaths(projectRoot, "sess2");
         ReplacementLedger ledger = new ReplacementLedger();
-        Layer1Offloader offloader = new Layer1Offloader(sm, paths, ledger);
+        Layer1Offloader offloader = new Layer1Offloader(sm, () -> paths, ledger);
         offloader.offloadAndSnip();
 
         long offloaded = List.of("t1", "t2", "t3").stream().filter(paths::fileExists).count();
@@ -74,7 +74,7 @@ class Layer1OffloaderTest {
             List.of(ToolResult.success("ok", big)));
         SessionPaths paths = new SessionPaths(projectRoot, "sess3");
         ReplacementLedger ledger = new ReplacementLedger();
-        Layer1Offloader offloader = new Layer1Offloader(sm, paths, ledger);
+        Layer1Offloader offloader = new Layer1Offloader(sm, () -> paths, ledger);
         offloader.offloadAndSnip();
         var mtime1 = Files.getLastModifiedTime(paths.toolResultPath("id1"));
         Thread.sleep(50);

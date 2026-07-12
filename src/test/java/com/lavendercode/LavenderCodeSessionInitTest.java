@@ -5,7 +5,8 @@ import com.lavendercode.core.config.LlmConfig;
 import com.lavendercode.core.config.Options;
 import com.lavendercode.core.config.ProviderConfig;
 import com.lavendercode.core.context.ContextBootstrap;
-import com.lavendercode.core.context.ContextManager;
+import com.lavendercode.core.context.SessionHandle;
+import com.lavendercode.core.context.SessionIdGenerator;
 import com.lavendercode.core.provider.LlmProvider;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -24,13 +25,12 @@ class LavenderCodeSessionInitTest {
         LlmProvider provider = mock(LlmProvider.class);
         when(provider.protocol()).thenReturn("openai");
 
-        ContextManager ctx = ContextBootstrap.create(
+        SessionHandle handle = ContextBootstrap.create(
             projectRoot, providerConfig, new InMemorySessionManager(), provider, config, null);
 
-        assertThat(ctx).isNotNull();
+        assertThat(handle.contextManager()).isNotNull();
+        assertThat(SessionIdGenerator.isNewFormat(handle.sessionId())).isTrue();
         assertThat(Files.exists(projectRoot.resolve(".lavendercode/sessions"))).isTrue();
-        try (var stream = Files.list(projectRoot.resolve(".lavendercode/sessions"))) {
-            assertThat(stream.findAny()).isPresent();
-        }
+        assertThat(Files.isDirectory(handle.paths().sessionRoot())).isTrue();
     }
 }

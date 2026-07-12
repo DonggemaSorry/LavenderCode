@@ -7,17 +7,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.logging.Logger;
+import java.util.function.Supplier;
 
 public final class Layer1Offloader {
     private static final Logger logger = Logger.getLogger(Layer1Offloader.class.getName());
 
     private final SessionManager sessionManager;
-    private final SessionPaths sessionPaths;
+    private final Supplier<SessionPaths> pathsSupplier;
     private final ReplacementLedger ledger;
 
-    public Layer1Offloader(SessionManager sessionManager, SessionPaths sessionPaths, ReplacementLedger ledger) {
+    public Layer1Offloader(SessionManager sessionManager, Supplier<SessionPaths> pathsSupplier, ReplacementLedger ledger) {
         this.sessionManager = sessionManager;
-        this.sessionPaths = sessionPaths;
+        this.pathsSupplier = pathsSupplier;
         this.ledger = ledger;
     }
 
@@ -80,6 +81,7 @@ public final class Layer1Offloader {
 
     private boolean tryOffload(ToolResultEntry e) {
         if (ledger.isSeen(e.toolCallId())) return false;
+        SessionPaths sessionPaths = pathsSupplier.get();
         try {
             if (sessionPaths.fileExists(e.toolCallId())) {
                 String existing = ledger.getReplacement(e.toolCallId());
