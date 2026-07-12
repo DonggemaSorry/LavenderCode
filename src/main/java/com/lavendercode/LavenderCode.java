@@ -9,6 +9,8 @@ import com.lavendercode.core.config.ConfigLoader;
 import com.lavendercode.core.config.LlmConfig;
 import com.lavendercode.core.config.Options;
 import com.lavendercode.core.config.ProviderConfig;
+import com.lavendercode.core.context.ContextBootstrap;
+import com.lavendercode.core.context.ContextManager;
 import com.lavendercode.core.mcp.McpBootstrap;
 import com.lavendercode.core.mcp.McpSessionManager;
 import com.lavendercode.core.mcp.McpShutdownHook;
@@ -80,12 +82,15 @@ public class LavenderCode {
 
             LlmProvider provider = ProviderRegistry.get(selectedProvider.protocol());
             SessionManager sessionManager = new InMemorySessionManager();
+            ContextManager contextManager = ContextBootstrap.create(
+                projectRoot, selectedProvider, sessionManager, provider, config, null);
 
             TerminalChatApplication app = new TerminalChatApplication(
                 sessionManager, provider,
                 providerName, selectedProvider.model(), config,
                 Theme.dark(),
-                projectRoot
+                projectRoot,
+                contextManager
             );
             app.run(terminal);
         } finally {

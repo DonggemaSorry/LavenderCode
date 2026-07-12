@@ -1,6 +1,7 @@
 package com.lavendercode.core.prompt;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
@@ -24,13 +25,13 @@ public class EnvironmentInfoCollector {
             var pb = new ProcessBuilder("git", "status", "--short", "--branch")
                 .directory(new File(System.getProperty("user.dir")))
                 .redirectErrorStream(true);
-            var p = pb.start();
-            if (!p.waitFor(3, TimeUnit.SECONDS)) {
+            Process p = pb.start();
+            String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+            if (!p.waitFor(10, TimeUnit.SECONDS)) {
                 p.destroyForcibly();
                 return null;
             }
             if (p.exitValue() != 0) return null;
-            String out = new String(p.getInputStream().readAllBytes()).trim();
             return out.isEmpty() ? "clean" : out;
         } catch (Exception e) {
             return null;

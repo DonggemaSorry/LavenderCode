@@ -2,6 +2,8 @@ package com.lavendercode.chat.terminal;
 
 import com.lavendercode.chat.session.SessionManager;
 import com.lavendercode.core.config.LlmConfig;
+import com.lavendercode.core.context.CompactTrigger;
+import com.lavendercode.core.context.ContextManager;
 import com.lavendercode.core.prompt.PromptContext;
 import com.lavendercode.core.prompt.ReminderInjector;
 import com.lavendercode.core.provider.*;
@@ -17,6 +19,7 @@ public class ReActLoop {
     private final SessionManager sessionManager;
     private final BatchingToolExecutor batchExecutor;
     private final TokenAccumulator tokenAccumulator;
+    private final ContextManager contextManager;
     private final int maxIterations;
     private final int maxUnknownRounds;
     private final AtomicBoolean cancelFlag = new AtomicBoolean(false);
@@ -29,11 +32,12 @@ public class ReActLoop {
 
     public ReActLoop(LlmProvider provider, SessionManager sessionManager,
                      BatchingToolExecutor batchExecutor, TokenAccumulator tokenAccumulator,
-                     int maxIterations, int maxUnknownRounds) {
+                     int maxIterations, int maxUnknownRounds, ContextManager contextManager) {
         this.provider = provider;
         this.sessionManager = sessionManager;
         this.batchExecutor = batchExecutor;
         this.tokenAccumulator = tokenAccumulator;
+        this.contextManager = contextManager != null ? contextManager : com.lavendercode.core.context.NoOpContextManager.INSTANCE;
         this.maxIterations = maxIterations;
         this.maxUnknownRounds = maxUnknownRounds;
     }
@@ -74,12 +78,28 @@ public class ReActLoop {
                     reminder.map(List::of).orElse(List.of()));
             }
 
+            contextManager.manageContext(CompactTrigger.AUTO, toolDefs);
+
             // 1. Stream collect
-            StreamEventIterator iter = (promptCtx != null)
-                ? provider.streamChat(sessionManager.getHistory(), config, toolDefs, promptCtx)
-                : provider.streamChat(sessionManager.getHistory(), config, toolDefs);
-            RoundCollector collector = new RoundCollector(sink);
-            RoundResult result = collector.consume(iter, cancelFlag);
+            boolean emergencyRetried = false;
+            RoundResult result;
+            while (true) {
+                StreamEventIterator iter = (promptCtx != null)
+                    ? provider.streamChat(sessionManager.getHistory(), config, toolDefs, promptCtx)
+                    : provider.streamChat(sessionManager.getHistory(), config, toolDefs);
+                RoundCollector collector = new RoundCollector(sink);
+                result = collector.consume(iter, cancelFlag);
+
+                if (result.hasError() && contextManager.isPromptTooLong(result.error())) {
+                    if (!emergencyRetried) {
+                        contextManager.runCompaction(CompactTrigger.EMERGENCY, toolDefs);
+                        contextManager.resetAnchor();
+                        emergencyRetried = true;
+                        continue;
+                    }
+                }
+                break;
+            }
 
             // ch05: cache hit info to debug log only
             if (result.cacheReadTokens() > 0 || result.cacheCreationTokens() > 0) {
@@ -101,6 +121,7 @@ public class ReActLoop {
 
             // 4. Token usage
             tokenAccumulator.add(result.inputTokens(), result.outputTokens());
+            contextManager.onUsage(result);
             sink.accept(new AgentEvent.Usage(tokenAccumulator.getTotalInput(), tokenAccumulator.getTotalOutput()));
 
             // 5. Natural completion
@@ -123,6 +144,8 @@ public class ReActLoop {
                 ToolCall tc = result.toolCalls().get(i);
                 sink.accept(new AgentEvent.ToolResultReady(tc.id(), toolResults.get(i)));
             }
+
+            contextManager.recordFileReads(result.toolCalls(), toolResults);
 
             // 8. Atomic write to history
             sessionManager.addToolMessages(result.toolCalls(), toolResults);

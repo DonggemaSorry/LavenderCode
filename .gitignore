@@ -12,6 +12,8 @@ target/
 # OS
 .DS_Store
 Thumbs.db
+nul
+relative.txt
 
 # Python cache
 __pycache__/
@@ -23,3 +25,11 @@ debug.log
 
 # Local permission overrides
 .lavendercode/permissions.local.yaml
+
+# Agent / IDE skill configs (local, not shared via repo)
+.claude/
+.cursor/
+.qoder/
+
+# Project documentation (local / not versioned in this repo)
+docs/

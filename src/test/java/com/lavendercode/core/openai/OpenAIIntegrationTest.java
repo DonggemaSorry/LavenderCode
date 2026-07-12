@@ -29,7 +29,7 @@ class OpenAIIntegrationTest {
 
         provider = new OpenAIProvider();
         config = new LlmConfig(
-            List.of(new ProviderConfig("openai", "openai", "gpt-4o", baseUrl, "test-key", null)),
+            List.of(ProviderConfig.of("openai", "openai", "gpt-4o", baseUrl, "test-key", null)),
             new Options(1024, null)
         );
         history = List.of(new Message(Role.USER, "Hello"));

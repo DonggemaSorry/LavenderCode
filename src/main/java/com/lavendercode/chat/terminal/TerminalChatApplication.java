@@ -2,6 +2,7 @@ package com.lavendercode.chat.terminal;
 
 import com.lavendercode.chat.session.SessionManager;
 import com.lavendercode.core.config.LlmConfig;
+import com.lavendercode.core.context.ContextManager;
 import com.lavendercode.core.provider.LlmProvider;
 import org.jline.terminal.Terminal;
 
@@ -20,6 +21,7 @@ public class TerminalChatApplication {
     private final LlmConfig config;
     private final Theme theme;
     private final Path projectRoot;
+    private final ContextManager contextManager;
 
     public TerminalChatApplication(SessionManager sessionManager,
                                    LlmProvider provider,
@@ -28,6 +30,18 @@ public class TerminalChatApplication {
                                    LlmConfig config,
                                    Theme theme,
                                    Path projectRoot) {
+        this(sessionManager, provider, providerName, modelName, config, theme, projectRoot,
+            com.lavendercode.core.context.NoOpContextManager.INSTANCE);
+    }
+
+    public TerminalChatApplication(SessionManager sessionManager,
+                                   LlmProvider provider,
+                                   String providerName,
+                                   String modelName,
+                                   LlmConfig config,
+                                   Theme theme,
+                                   Path projectRoot,
+                                   ContextManager contextManager) {
         this.sessionManager = sessionManager;
         this.provider = provider;
         this.providerName = providerName;
@@ -35,6 +49,7 @@ public class TerminalChatApplication {
         this.config = config;
         this.theme = theme;
         this.projectRoot = projectRoot;
+        this.contextManager = contextManager != null ? contextManager : com.lavendercode.core.context.NoOpContextManager.INSTANCE;
     }
 
     public TerminalChatApplication(SessionManager sessionManager,
@@ -62,7 +77,7 @@ public class TerminalChatApplication {
         NetworkOrchestrator orchestrator = new NetworkOrchestrator(
             deltaBuffer, renderQueue, inputQueue,
             sessionManager, provider, providerName, modelName, config,
-            timerScheduler, projectRoot
+            timerScheduler, projectRoot, contextManager
         );
         InputAreaLayout inputLayout = new InputAreaLayout();
         TerminalRenderer renderer = new TerminalRenderer(

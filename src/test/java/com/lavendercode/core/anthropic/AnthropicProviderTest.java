@@ -51,7 +51,7 @@ class AnthropicProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            List.of(new ProviderConfig("anthropic", "anthropic", "claude-sonnet-4-20250514", baseUrl, "sk-ant-test", new ThinkingConfig(true, 4000))),
+            List.of(ProviderConfig.of("anthropic", "anthropic", "claude-sonnet-4-20250514", baseUrl, "sk-ant-test", new ThinkingConfig(true, 4000))),
             new Options(4096, "You are helpful.")
         );
 
@@ -99,7 +99,7 @@ class AnthropicProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            List.of(new ProviderConfig("anthropic", "anthropic", "claude-sonnet-4", baseUrl, "key", new ThinkingConfig(false, 0))),
+            List.of(ProviderConfig.of("anthropic", "anthropic", "claude-sonnet-4", baseUrl, "key", new ThinkingConfig(false, 0))),
             new Options(1024, null)
         );
 
@@ -141,7 +141,7 @@ class AnthropicProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            List.of(new ProviderConfig("anthropic", "anthropic", "claude-sonnet-4", baseUrl, "key", new ThinkingConfig(true, 1024))),
+            List.of(ProviderConfig.of("anthropic", "anthropic", "claude-sonnet-4", baseUrl, "key", new ThinkingConfig(true, 1024))),
             new Options(1024, null)
         );
 
@@ -166,7 +166,7 @@ class AnthropicProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            List.of(new ProviderConfig("anthropic", "anthropic", "claude-sonnet-4", baseUrl, "bad-key", new ThinkingConfig(false, 0))),
+            List.of(ProviderConfig.of("anthropic", "anthropic", "claude-sonnet-4", baseUrl, "bad-key", new ThinkingConfig(false, 0))),
             new Options(1024, null)
         );
 
@@ -192,7 +192,7 @@ class AnthropicProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            List.of(new ProviderConfig("anthropic", "anthropic", "claude-sonnet-4", baseUrl, "key", new ThinkingConfig(false, 0))),
+            List.of(ProviderConfig.of("anthropic", "anthropic", "claude-sonnet-4", baseUrl, "key", new ThinkingConfig(false, 0))),
             new Options(1024, null)
         );
 
@@ -220,7 +220,7 @@ class AnthropicProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            List.of(new ProviderConfig("anthropic", "anthropic", "claude-sonnet-4", baseUrl, "key", new ThinkingConfig(false, 0))),
+            List.of(ProviderConfig.of("anthropic", "anthropic", "claude-sonnet-4", baseUrl, "key", new ThinkingConfig(false, 0))),
             new Options(1024, null)
         );
 
@@ -246,7 +246,7 @@ class AnthropicProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            List.of(new ProviderConfig("anthropic", "anthropic", "claude-sonnet-4", baseUrl, "key", new ThinkingConfig(false, 0))),
+            List.of(ProviderConfig.of("anthropic", "anthropic", "claude-sonnet-4", baseUrl, "key", new ThinkingConfig(false, 0))),
             new Options(1024, "")
         );
 
@@ -280,7 +280,7 @@ class AnthropicProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            List.of(new ProviderConfig("anthropic", "anthropic", "claude-sonnet-4", baseUrl, "key", new ThinkingConfig(false, 0))),
+            List.of(ProviderConfig.of("anthropic", "anthropic", "claude-sonnet-4", baseUrl, "key", new ThinkingConfig(false, 0))),
             new Options(1024, null)
         );
 

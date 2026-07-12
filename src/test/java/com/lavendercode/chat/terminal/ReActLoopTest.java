@@ -62,7 +62,7 @@ class ReActLoopTest {
     void shouldStopOnNaturalCompletion_Ac2() {
         var iter1 = mockIter(new StreamEvent.ContentDelta("Done!"), new StreamEvent.StreamComplete());
         when(provider.streamChat(anyList(), any(), anyList())).thenReturn(iter1);
-        var loop = new ReActLoop(provider, session, batchExec, tokens, 10, 3);
+        var loop = new ReActLoop(provider, session, batchExec, tokens, 10, 3, com.lavendercode.core.context.NoOpContextManager.INSTANCE);
         List<AgentEvent> events = new ArrayList<>();
         loop.run("hello", events::add);
         assertThat(events).filteredOn(e -> e instanceof AgentEvent.Complete).hasSize(1);
@@ -77,7 +77,7 @@ class ReActLoopTest {
         var iter3 = mockIter(toolCallIter("fake_tool", "fake_tool"));
         when(provider.streamChat(anyList(), any(), anyList()))
             .thenReturn(iter1).thenReturn(iter2).thenReturn(iter3);
-        var loop = new ReActLoop(provider, session, batchExec, tokens, 3, 3);
+        var loop = new ReActLoop(provider, session, batchExec, tokens, 3, 3, com.lavendercode.core.context.NoOpContextManager.INSTANCE);
         List<AgentEvent> events = new ArrayList<>();
         loop.run("hello", events::add);
         assertThat(events).filteredOn(e -> e instanceof AgentEvent.Stopped).hasSize(1);
@@ -93,7 +93,7 @@ class ReActLoopTest {
         var iter3 = mockIter(toolCallIter("fake_tool"));
         when(provider.streamChat(anyList(), any(), anyList()))
             .thenReturn(iter1).thenReturn(iter2).thenReturn(iter3);
-        var loop = new ReActLoop(provider, session, batchExec, tokens, 10, 3);
+        var loop = new ReActLoop(provider, session, batchExec, tokens, 10, 3, com.lavendercode.core.context.NoOpContextManager.INSTANCE);
         List<AgentEvent> events = new ArrayList<>();
         loop.run("hello", events::add);
         var stopped = (AgentEvent.Stopped) events.stream().filter(e -> e instanceof AgentEvent.Stopped).findFirst().get();
@@ -105,7 +105,7 @@ class ReActLoopTest {
     void shouldRecoverFromStreamError_Ac5() {
         var iter1 = mockIter(new StreamEvent.StreamError("fail", 500));
         when(provider.streamChat(anyList(), any(), anyList())).thenReturn(iter1);
-        var loop = new ReActLoop(provider, session, batchExec, tokens, 10, 3);
+        var loop = new ReActLoop(provider, session, batchExec, tokens, 10, 3, com.lavendercode.core.context.NoOpContextManager.INSTANCE);
         List<AgentEvent> events = new ArrayList<>();
         loop.run("hello", events::add);
         assertThat(events).filteredOn(e -> e instanceof AgentEvent.Error).hasSize(1);
@@ -125,7 +125,7 @@ class ReActLoopTest {
             new StreamEvent.StreamComplete());
         when(provider.streamChat(anyList(), any(), anyList()))
             .thenReturn(iter1).thenReturn(iter2);
-        var loop = new ReActLoop(provider, session, batchExec, tokens, 10, 3);
+        var loop = new ReActLoop(provider, session, batchExec, tokens, 10, 3, com.lavendercode.core.context.NoOpContextManager.INSTANCE);
         List<AgentEvent> events = new ArrayList<>();
         loop.run("hello", events::add);
         assertThat(events).filteredOn(e -> e instanceof AgentEvent.RoundStart).hasSize(2);
@@ -145,7 +145,7 @@ class ReActLoopTest {
         var iter2 = mockIter(new StreamEvent.ContentDelta("ok"), new StreamEvent.StreamComplete());
         when(provider.streamChat(anyList(), any(), anyList()))
             .thenReturn(iter1).thenReturn(iter2);
-        var loop = new ReActLoop(provider, session, batchExec, tokens, 10, 3);
+        var loop = new ReActLoop(provider, session, batchExec, tokens, 10, 3, com.lavendercode.core.context.NoOpContextManager.INSTANCE);
         List<AgentEvent> events = new ArrayList<>();
         loop.run("hi", events::add);
         Set<Class<?>> types = new HashSet<>();
@@ -173,7 +173,7 @@ class ReActLoopTest {
             new StreamEvent.StreamComplete());
         when(provider.streamChat(anyList(), any(), anyList()))
             .thenReturn(iter1).thenReturn(iter2);
-        var loop = new ReActLoop(provider, session, batchExec, tokens, 10, 3);
+        var loop = new ReActLoop(provider, session, batchExec, tokens, 10, 3, com.lavendercode.core.context.NoOpContextManager.INSTANCE);
         List<AgentEvent> events = new ArrayList<>();
         loop.run("hi", events::add);
         var usageEvents = events.stream().filter(e -> e instanceof AgentEvent.Usage).toList();
@@ -201,7 +201,7 @@ class ReActLoopTest {
             new StreamEvent.StreamComplete());
         when(provider.streamChat(anyList(), any(), anyList()))
             .thenReturn(iter1).thenReturn(iter2).thenReturn(iter3);
-        var loop = new ReActLoop(provider, session, batchExec, tokens, 10, 3);
+        var loop = new ReActLoop(provider, session, batchExec, tokens, 10, 3, com.lavendercode.core.context.NoOpContextManager.INSTANCE);
         List<AgentEvent> events = new ArrayList<>();
         loop.run("hi", events::add);
         var roundStarts = events.stream()
@@ -233,7 +233,7 @@ class ReActLoopTest {
             new StreamEvent.StreamComplete());
         when(provider.streamChat(anyList(), any(), anyList())).thenReturn(iter1);
 
-        var loop = new ReActLoop(provider, session, batchExec, tokens, 10, 3);
+        var loop = new ReActLoop(provider, session, batchExec, tokens, 10, 3, com.lavendercode.core.context.NoOpContextManager.INSTANCE);
         List<AgentEvent> events = new ArrayList<>();
 
         // Run in background, cancel after 200ms

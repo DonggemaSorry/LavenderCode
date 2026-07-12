@@ -52,7 +52,7 @@ class OpenAIProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            List.of(new ProviderConfig("openai", "openai", "gpt-4o", baseUrl, "sk-test", null)),
+            List.of(ProviderConfig.of("openai", "openai", "gpt-4o", baseUrl, "sk-test", null)),
             new Options(2048, "You are helpful.")
         );
 
@@ -95,7 +95,7 @@ class OpenAIProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            List.of(new ProviderConfig("openai", "openai", "gpt-4o", baseUrl, "sk-test", null)),
+            List.of(ProviderConfig.of("openai", "openai", "gpt-4o", baseUrl, "sk-test", null)),
             new Options(2048, null)
         );
 
@@ -135,7 +135,7 @@ class OpenAIProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            List.of(new ProviderConfig("openai", "openai", "gpt-4o", baseUrl, "sk-test", null)),
+            List.of(ProviderConfig.of("openai", "openai", "gpt-4o", baseUrl, "sk-test", null)),
             new Options(2048, null)
         );
 
@@ -158,7 +158,7 @@ class OpenAIProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            List.of(new ProviderConfig("openai", "openai", "gpt-4o", baseUrl, "bad-key", null)),
+            List.of(ProviderConfig.of("openai", "openai", "gpt-4o", baseUrl, "bad-key", null)),
             new Options(2048, null)
         );
 
@@ -183,7 +183,7 @@ class OpenAIProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            List.of(new ProviderConfig("openai", "openai", "gpt-4o", baseUrl, "key", null)),
+            List.of(ProviderConfig.of("openai", "openai", "gpt-4o", baseUrl, "key", null)),
             new Options(2048, null)
         );
 
@@ -211,7 +211,7 @@ class OpenAIProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            List.of(new ProviderConfig("openai", "openai", "gpt-4o", baseUrl, "key", null)),
+            List.of(ProviderConfig.of("openai", "openai", "gpt-4o", baseUrl, "key", null)),
             new Options(2048, null)
         );
 
@@ -238,7 +238,7 @@ class OpenAIProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            List.of(new ProviderConfig("openai", "openai", "gpt-4o", baseUrl, "key", null)),
+            List.of(ProviderConfig.of("openai", "openai", "gpt-4o", baseUrl, "key", null)),
             new Options(2048, "")
         );
 
@@ -266,7 +266,7 @@ class OpenAIProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            List.of(new ProviderConfig("openai", "openai", "gpt-4o", baseUrl, "key", null)),
+            List.of(ProviderConfig.of("openai", "openai", "gpt-4o", baseUrl, "key", null)),
             new Options(2048, null)
         );
 
@@ -297,7 +297,7 @@ class OpenAIProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            List.of(new ProviderConfig("openai", "openai", "gpt-4o", baseUrl, "key", null)),
+            List.of(ProviderConfig.of("openai", "openai", "gpt-4o", baseUrl, "key", null)),
             new Options(2048, null)
         );
 
@@ -340,7 +340,7 @@ class OpenAIProviderTest {
         baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 
         LlmConfig config = new LlmConfig(
-            List.of(new ProviderConfig("openai", "openai", "deepseek-chat", baseUrl, "key", null)),
+            List.of(ProviderConfig.of("openai", "openai", "deepseek-chat", baseUrl, "key", null)),
             new Options(2048, null)
         );
 

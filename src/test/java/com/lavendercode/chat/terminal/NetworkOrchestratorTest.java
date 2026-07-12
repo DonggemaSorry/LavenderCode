@@ -42,7 +42,7 @@ class NetworkOrchestratorTest {
         provider = mock(LlmProvider.class);
         when(provider.protocol()).thenReturn("openai-compatible");
         LlmConfig config = new LlmConfig(
-            List.of(new ProviderConfig("openai-compatible", "openai-compatible", "gpt-4", "http://localhost", "key", null)), null);
+            List.of(ProviderConfig.of("openai-compatible", "openai-compatible", "gpt-4", "http://localhost", "key", null)), null);
 
         orchestrator = new NetworkOrchestrator(
             deltaBuffer, renderQueue, inputQueue,

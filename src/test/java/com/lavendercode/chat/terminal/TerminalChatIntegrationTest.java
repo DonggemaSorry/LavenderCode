@@ -90,7 +90,7 @@ class TerminalChatIntegrationTest {
         when(provider.streamChat(any(), any(), any())).thenAnswer(inv -> blockingIterator());
 
         LlmConfig config = new LlmConfig(
-            List.of(new ProviderConfig("openai-compatible", "openai-compatible", "gpt-4", "http://localhost", "key", null)), null);
+            List.of(ProviderConfig.of("openai-compatible", "openai-compatible", "gpt-4", "http://localhost", "key", null)), null);
 
         orchestrator = new NetworkOrchestrator(
             deltaBuffer, renderQueue, inputQueue,
@@ -128,14 +128,14 @@ class TerminalChatIntegrationTest {
 
     @Test
     void clearCommandShouldEmitClearChat() throws Exception {
-        inputQueue.put(new InputEvent.SendMessage("msg1"));
-        pollUntil(RenderEvent.AddUserMessage.class);
+        sessionManager.addUserMessage("msg1");
 
         inputQueue.put(new InputEvent.ExecuteCommand(InputEvent.CommandType.CLEAR, ""));
 
         RenderEvent event = pollUntil(RenderEvent.ClearChat.class);
         assertThat(event).isNotNull();
         assertThat(event).isInstanceOf(RenderEvent.ClearChat.class);
+        assertThat(sessionManager.getHistory()).isEmpty();
 
         inputQueue.put(new InputEvent.Shutdown());
     }

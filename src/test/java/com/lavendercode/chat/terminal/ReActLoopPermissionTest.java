@@ -44,7 +44,7 @@ class ReActLoopPermissionTest {
     @Test
     void loopContinuesAfterPermissionDeny() {
         var provider = new TwoRoundProvider();
-        var loop = new ReActLoop(provider, sessionManager, batchExecutor, new TokenAccumulator(), 10, 3);
+        var loop = new ReActLoop(provider, sessionManager, batchExecutor, new TokenAccumulator(), 10, 3, com.lavendercode.core.context.NoOpContextManager.INSTANCE);
         loop.setConfig(config(), List.of(), "stable", "env",
             new PermissionModeManager(PermissionMode.DEFAULT));
 
@@ -64,7 +64,7 @@ class ReActLoopPermissionTest {
 
     private static LlmConfig config() {
         return new LlmConfig(
-            List.of(new ProviderConfig("mock", "mock", "m", "http://localhost", "k", null)),
+            List.of(ProviderConfig.of("mock", "mock", "m", "http://localhost", "k", null)),
             new Options());
     }
 

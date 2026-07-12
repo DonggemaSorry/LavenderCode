@@ -10,9 +10,12 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public final class PermissionConfigLoader {
 
+    private static final Logger LOGGER = Logger.getLogger(PermissionConfigLoader.class.getName());
     private static final ObjectMapper MAPPER = new ObjectMapper(new YAMLFactory());
 
     private PermissionConfigLoader() {}
@@ -49,7 +52,8 @@ public final class PermissionConfigLoader {
             List<PermissionRule> rules = parseRules(root.get("rules"));
             return new TierConfig(rules, mode);
         } catch (IOException e) {
-            System.err.println("WARN: failed to load permission config " + path + ": " + e.getMessage());
+            LOGGER.log(Level.WARNING, "failed to load permission config {0}: {1}",
+                new Object[] {path, e.getMessage()});
             return TierConfig.empty();
         }
     }

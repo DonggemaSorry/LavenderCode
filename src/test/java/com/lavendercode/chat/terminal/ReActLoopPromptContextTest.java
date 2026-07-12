@@ -103,14 +103,14 @@ class ReActLoopPromptContextTest {
     }
 
     private LlmConfig config() {
-        return new LlmConfig(List.of(new ProviderConfig("mock","mock","m","http://localhost","k",null)), new Options());
+        return new LlmConfig(List.of(ProviderConfig.of("mock","mock","m","http://localhost","k",null)), new Options());
     }
 
     @Test
     void buildsPromptContextPerRound() {
         // Round 1: tool call, Round 2: no tools (complete)
         var provider = new CtxCaptureProvider(List.of("tool_call", "done"));
-        var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3);
+        var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3, com.lavendercode.core.context.NoOpContextManager.INSTANCE);
         var planMode = new PermissionModeManager(PermissionMode.DEFAULT);
         planMode.enterPlanMode();
         loop.setConfig(config(), List.of(),
@@ -130,7 +130,7 @@ class ReActLoopPromptContextTest {
     @Test
     void reminderNotInSessionHistory() {
         var provider = new CtxCaptureProvider(List.of("done"));
-        var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3);
+        var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3, com.lavendercode.core.context.NoOpContextManager.INSTANCE);
         var planMode = new PermissionModeManager(PermissionMode.DEFAULT);
         planMode.enterPlanMode();
         loop.setConfig(config(), List.of(), "stable", "env", planMode);
@@ -183,7 +183,7 @@ class ReActLoopPromptContextTest {
             }
         };
 
-        var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3);
+        var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3, com.lavendercode.core.context.NoOpContextManager.INSTANCE);
         loop.setConfig(config(), List.of(), "stable", "env", new PermissionModeManager(PermissionMode.DEFAULT));
         List<AgentEvent> events = new ArrayList<>();
 
@@ -204,7 +204,7 @@ class ReActLoopPromptContextTest {
                 return new SingleEventIterator(new StreamEvent.StreamError("boom", 500));
             }
         };
-        var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3);
+        var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3, com.lavendercode.core.context.NoOpContextManager.INSTANCE);
         loop.setConfig(config(), List.of(), "stable", "env", new PermissionModeManager(PermissionMode.DEFAULT));
         List<AgentEvent> events = new ArrayList<>();
         loop.run("test", events::add);
@@ -240,7 +240,7 @@ class ReActLoopPromptContextTest {
             )
         ));
 
-        var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3);
+        var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3, com.lavendercode.core.context.NoOpContextManager.INSTANCE);
         loop.setConfig(config(), List.of(), "stable", "env", new PermissionModeManager(PermissionMode.DEFAULT));
         List<AgentEvent> events = new ArrayList<>();
         loop.run("test", events::add);
@@ -285,7 +285,7 @@ class ReActLoopPromptContextTest {
             )
         ));
 
-        var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3);
+        var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3, com.lavendercode.core.context.NoOpContextManager.INSTANCE);
         var planMode = new PermissionModeManager(PermissionMode.DEFAULT);
         planMode.enterPlanMode();
         loop.setConfig(config(), List.of(), "stable", "env", planMode);
@@ -315,7 +315,7 @@ class ReActLoopPromptContextTest {
                     new StreamEvent.StreamComplete());
             }
         };
-        var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3);
+        var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3, com.lavendercode.core.context.NoOpContextManager.INSTANCE);
         loop.setConfig(config(), List.of(), "stable", "env", new PermissionModeManager(PermissionMode.DEFAULT));
         List<AgentEvent> events = new ArrayList<>();
         loop.run("test", events::add);

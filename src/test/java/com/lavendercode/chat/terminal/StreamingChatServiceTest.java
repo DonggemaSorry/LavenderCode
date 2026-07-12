@@ -27,7 +27,7 @@ class StreamingChatServiceTest {
         when(provider.streamChat(anyList(), any())).thenReturn(iterator);
 
         LlmConfig config = new LlmConfig(
-            List.of(new ProviderConfig("openai-compatible", "openai-compatible", "model", "http://localhost", "key", null)),
+            List.of(ProviderConfig.of("openai-compatible", "openai-compatible", "model", "http://localhost", "key", null)),
             null
         );
 

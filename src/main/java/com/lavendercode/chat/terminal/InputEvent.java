@@ -13,6 +13,6 @@ public sealed interface InputEvent {
     record HitlChoice(com.lavendercode.core.permission.HitlChoice choice) implements InputEvent {}
 
     enum CommandType {
-        EXIT, QUIT, CLEAR, HELP, CANCEL, SCROLL, ESC_CANCEL, PLAN, DO
+        EXIT, QUIT, CLEAR, HELP, CANCEL, SCROLL, ESC_CANCEL, PLAN, DO, COMPACT, UNKNOWN
     }
 }
