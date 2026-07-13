@@ -6,6 +6,8 @@ public sealed interface InputEvent {
 
     record ExecuteCommand(CommandType type, String args) implements InputEvent {}
 
+    record ResumeSession(String sessionId) implements InputEvent {}
+
     record Shutdown() implements InputEvent {}
 
     record CyclePermissionMode() implements InputEvent {}
@@ -13,6 +15,6 @@ public sealed interface InputEvent {
     record HitlChoice(com.lavendercode.core.permission.HitlChoice choice) implements InputEvent {}
 
     enum CommandType {
-        EXIT, QUIT, CLEAR, HELP, CANCEL, SCROLL, ESC_CANCEL, PLAN, DO, COMPACT, UNKNOWN
+        EXIT, QUIT, CLEAR, HELP, CANCEL, SCROLL, ESC_CANCEL, PLAN, DO, COMPACT, RESUME, UNKNOWN
     }
 }

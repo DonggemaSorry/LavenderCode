@@ -46,7 +46,7 @@ class CompactionServiceTest {
     private CompactionService buildService(SessionManager sm, LlmProvider provider) {
         SessionPaths paths = new SessionPaths(projectRoot, "test-session");
         ReplacementLedger ledger = new ReplacementLedger();
-        Layer1Offloader layer1 = new Layer1Offloader(sm, paths, ledger);
+        Layer1Offloader layer1 = new Layer1Offloader(sm, () -> paths, ledger);
         TokenEstimator estimator = new TokenEstimator();
         FileReadTracker tracker = new FileReadTracker();
         AutoCompactCircuitBreaker breaker = new AutoCompactCircuitBreaker();

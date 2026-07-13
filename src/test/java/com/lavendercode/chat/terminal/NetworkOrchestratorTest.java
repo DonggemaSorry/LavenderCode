@@ -4,6 +4,8 @@ import com.lavendercode.chat.session.InMemorySessionManager;
 import com.lavendercode.chat.session.SessionManager;
 import com.lavendercode.core.config.LlmConfig;
 import com.lavendercode.core.config.ProviderConfig;
+import com.lavendercode.core.memory.MemoryService;
+import com.lavendercode.core.prompt.PromptContext;
 import com.lavendercode.core.provider.*;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,6 +30,7 @@ class NetworkOrchestratorTest {
     private SessionManager sessionManager;
     private LlmProvider provider;
     private NetworkOrchestrator orchestrator;
+    private LlmConfig config;
 
     @TempDir
     Path projectRoot;
@@ -41,7 +44,7 @@ class NetworkOrchestratorTest {
         sessionManager = new InMemorySessionManager();
         provider = mock(LlmProvider.class);
         when(provider.protocol()).thenReturn("openai-compatible");
-        LlmConfig config = new LlmConfig(
+        config = new LlmConfig(
             List.of(ProviderConfig.of("openai-compatible", "openai-compatible", "gpt-4", "http://localhost", "key", null)), null);
 
         orchestrator = new NetworkOrchestrator(
@@ -108,5 +111,102 @@ class NetworkOrchestratorTest {
         RenderEvent event = pollUntil(RenderEvent.AddSystemMessage.class);
         assertThat(event).isNotNull();
         assertThat(((RenderEvent.AddSystemMessage) event).text()).contains("/exit");
+    }
+
+    @Test
+    void sendMessageInjectsFileInstructionsAndMemoryIntoSystemPrompt() throws Exception {
+        when(provider.streamChat(any(), any(), any(), any())).thenReturn(completingIterator());
+        NetworkOrchestrator withInstructions = new NetworkOrchestrator(
+            deltaBuffer, renderQueue, inputQueue,
+            sessionManager, provider, "test-provider", "gpt-4", config,
+            scheduler, projectRoot,
+            com.lavendercode.core.context.NoOpContextManager.INSTANCE,
+            "File instructions.",
+            () -> "Memory index."
+        );
+        Thread thread = new Thread(withInstructions::run);
+        thread.start();
+
+        inputQueue.put(new InputEvent.SendMessage("hello"));
+
+        var promptCaptor = org.mockito.ArgumentCaptor.forClass(PromptContext.class);
+        verify(provider, timeout(2_000)).streamChat(any(), any(), any(), promptCaptor.capture());
+        String stablePrompt = promptCaptor.getValue().stablePrompt();
+        assertThat(stablePrompt).containsSubsequence(
+            "Text Output",
+            "File instructions.",
+            "Memory index.");
+
+        inputQueue.put(new InputEvent.Shutdown());
+        thread.join(2_000);
+    }
+
+    @Test
+    void completeEventTriggersMemoryUpdateWithLastUserMessage() throws Exception {
+        when(provider.streamChat(any(), any(), any(), any())).thenReturn(completingIterator());
+        RecordingMemoryService memoryService = new RecordingMemoryService(projectRoot);
+        NetworkOrchestrator withMemory = new NetworkOrchestrator(
+            deltaBuffer, renderQueue, inputQueue,
+            sessionManager, provider, "test-provider", "gpt-4", config,
+            scheduler, projectRoot,
+            com.lavendercode.core.context.NoOpContextManager.INSTANCE,
+            "File instructions.",
+            memoryService
+        );
+        Thread thread = new Thread(withMemory::run);
+        thread.start();
+
+        inputQueue.put(new InputEvent.SendMessage("remember the build command"));
+
+        assertThat(memoryService.called.await(2, TimeUnit.SECONDS)).isTrue();
+        assertThat(memoryService.turnCount).isEqualTo(1);
+        assertThat(memoryService.lastUserMessage).isEqualTo("remember the build command");
+        assertThat(memoryService.history).isNotEmpty();
+
+        inputQueue.put(new InputEvent.Shutdown());
+        thread.join(2_000);
+    }
+
+    private static StreamEventIterator completingIterator() {
+        return new StreamEventIterator() {
+            private boolean emitted;
+
+            @Override
+            public boolean hasNext() {
+                return !emitted;
+            }
+
+            @Override
+            public StreamEvent next() {
+                emitted = true;
+                return new StreamEvent.StreamComplete();
+            }
+
+            @Override
+            public void close() {
+            }
+        };
+    }
+
+    private static final class RecordingMemoryService extends MemoryService {
+        private final CountDownLatch called = new CountDownLatch(1);
+        private volatile int turnCount;
+        private volatile String lastUserMessage;
+        private volatile List<Message> history = List.of();
+
+        private RecordingMemoryService(Path projectRoot) {
+            super(projectRoot, projectRoot);
+        }
+
+        @Override
+        public void maybeUpdateAsync(LlmProvider provider, LlmConfig config,
+                                     List<Message> recentMessages,
+                                     int turnCount,
+                                     String lastUserMessage) {
+            this.history = recentMessages;
+            this.turnCount = turnCount;
+            this.lastUserMessage = lastUserMessage;
+            called.countDown();
+        }
     }
 }

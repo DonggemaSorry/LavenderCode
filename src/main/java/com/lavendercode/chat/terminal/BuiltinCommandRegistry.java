@@ -12,7 +12,8 @@ public final class BuiltinCommandRegistry {
         Map.entry("cancel", InputEvent.CommandType.CANCEL),
         Map.entry("plan", InputEvent.CommandType.PLAN),
         Map.entry("do", InputEvent.CommandType.DO),
-        Map.entry("compact", InputEvent.CommandType.COMPACT)
+        Map.entry("compact", InputEvent.CommandType.COMPACT),
+        Map.entry("resume", InputEvent.CommandType.RESUME)
     );
 
     private BuiltinCommandRegistry() {}
@@ -46,6 +47,7 @@ public final class BuiltinCommandRegistry {
               /plan       - Enter plan mode (read-only tools only)
               /do         - Exit plan mode and execute plan
               /compact    - Compress conversation context
+              /resume     - Pick and restore a saved session
               /cancel     - Cancel current request
             Keyboard:
               Shift+Tab   - Cycle permission mode

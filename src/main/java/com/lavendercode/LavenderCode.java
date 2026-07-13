@@ -1,7 +1,10 @@
 package com.lavendercode;
 
 import com.lavendercode.chat.session.InMemorySessionManager;
+import com.lavendercode.chat.session.PersistingSessionManager;
+import com.lavendercode.chat.session.SessionCleanup;
 import com.lavendercode.chat.session.SessionManager;
+import com.lavendercode.chat.session.SessionTranscriptWriter;
 import com.lavendercode.chat.terminal.ProviderSelector;
 import com.lavendercode.chat.terminal.TerminalChatApplication;
 import com.lavendercode.chat.terminal.Theme;
@@ -11,9 +14,12 @@ import com.lavendercode.core.config.Options;
 import com.lavendercode.core.config.ProviderConfig;
 import com.lavendercode.core.context.ContextBootstrap;
 import com.lavendercode.core.context.ContextManager;
+import com.lavendercode.core.context.SessionHandle;
 import com.lavendercode.core.mcp.McpBootstrap;
 import com.lavendercode.core.mcp.McpSessionManager;
 import com.lavendercode.core.mcp.McpShutdownHook;
+import com.lavendercode.core.memory.MemoryService;
+import com.lavendercode.core.prompt.InstructionLoader;
 import com.lavendercode.core.provider.LlmProvider;
 import com.lavendercode.core.provider.ProviderRegistry;
 import com.lavendercode.core.tool.*;
@@ -75,22 +81,33 @@ public class LavenderCode {
         }
 
         Path projectRoot = Path.of("").toAbsolutePath().normalize();
+        SessionCleanup.startBackground(projectRoot.resolve(".lavendercode/sessions"));
+        String instructions = InstructionLoader.load(projectRoot);
+        MemoryService memoryService = new MemoryService(projectRoot, Path.of(System.getProperty("user.home")));
+        memoryService.loadIndex();
         McpSessionManager mcpSessions = new McpSessionManager();
         McpShutdownHook.register(mcpSessions);
         try {
             McpBootstrap.discoverAndRegister(projectRoot, mcpSessions);
 
             LlmProvider provider = ProviderRegistry.get(selectedProvider.protocol());
-            SessionManager sessionManager = new InMemorySessionManager();
-            ContextManager contextManager = ContextBootstrap.create(
-                projectRoot, selectedProvider, sessionManager, provider, config, null);
+            SessionManager inner = new InMemorySessionManager();
+            SessionHandle handle = ContextBootstrap.create(
+                projectRoot, selectedProvider, inner, provider, config, null);
+            SessionTranscriptWriter writer = SessionTranscriptWriter.open(handle.paths().conversationJsonl());
+            SessionManager sessionManager = new PersistingSessionManager(inner, writer, selectedProvider.model());
+            ContextManager contextManager = handle.contextManager();
 
             TerminalChatApplication app = new TerminalChatApplication(
                 sessionManager, provider,
                 providerName, selectedProvider.model(), config,
                 Theme.dark(),
                 projectRoot,
-                contextManager
+                contextManager,
+                handle,
+                writer,
+                instructions,
+                memoryService
             );
             app.run(terminal);
         } finally {
