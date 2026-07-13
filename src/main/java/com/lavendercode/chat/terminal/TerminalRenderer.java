@@ -192,6 +192,9 @@ public class TerminalRenderer {
             case RenderEvent.CompletionMenu(var entries, int selected, boolean visible) -> {
                 // Rendering will be implemented in Task 12
             }
+            case RenderEvent.CompletionEntry(var name, var description) -> {
+                // Completion entry rendering will be implemented in Task 12
+            }
             case RenderEvent.Shutdown() -> { /* handled in run() */ }
         }
     }
