@@ -54,6 +54,38 @@ public class MemoryService {
         return indexCache;
     }
 
+
+    public List<String> projectMemoryFileNames() {
+        return listMemoryFileNames(projectMemoryDir);
+    }
+
+    public List<String> userMemoryFileNames() {
+        return listMemoryFileNames(userMemoryDir);
+    }
+
+    public List<String> fileNames() {
+        var all = new ArrayList<String>();
+        all.addAll(projectMemoryFileNames());
+        all.addAll(userMemoryFileNames());
+        return all;
+    }
+
+    private static List<String> listMemoryFileNames(Path dir) {
+        try {
+            if (!Files.isDirectory(dir)) return List.of();
+            try (var stream = Files.list(dir)) {
+                return stream
+                    .filter(Files::isRegularFile)
+                    .map(p -> p.getFileName().toString())
+                    .filter(name -> name.endsWith(".md") && !name.equals("MEMORY.md"))
+                    .sorted()
+                    .toList();
+            }
+        } catch (IOException e) {
+            return List.of();
+        }
+    }
+
     public List<MemoryAction> parseActions(String json) throws IOException {
         String array = extractJsonArray(stripMarkdownFence(json == null ? "" : json.trim()));
         if (array.isBlank()) {
