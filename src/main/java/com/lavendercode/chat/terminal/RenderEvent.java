@@ -2,6 +2,7 @@ package com.lavendercode.chat.terminal;
 
 import com.lavendercode.core.permission.HitlChoice;
 import com.lavendercode.core.permission.HitlRequest;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -25,6 +26,8 @@ public sealed interface RenderEvent
             RenderEvent.RefreshInputChrome,
             RenderEvent.UpdateInputDraft,
             RenderEvent.RefreshAll,
+            RenderEvent.CompletionMenu,
+            RenderEvent.CompletionEntry,
             RenderEvent.PermissionPrompt,
             RenderEvent.PermissionPromptDismiss,
             RenderEvent.Shutdown {
@@ -103,6 +106,28 @@ public sealed interface RenderEvent
     record ToolResultRender(String toolCallId, String summary, boolean success, int contentLength) implements RenderEvent {}
 
     record RefreshAll() implements RenderEvent {}
+
+    record CompletionMenu(
+        List<CompletionEntry> entries,
+        int selectedIndex,
+        boolean visible
+    ) implements RenderEvent {
+        public CompletionMenu {
+            Objects.requireNonNull(entries);
+            entries = List.copyOf(entries);
+            if (selectedIndex < 0) selectedIndex = 0;
+        }
+    }
+
+    record CompletionEntry(
+        String name,
+        String description
+    ) implements RenderEvent {
+        public CompletionEntry {
+            Objects.requireNonNull(name);
+            Objects.requireNonNull(description);
+        }
+    }
 
     record Shutdown() implements RenderEvent {}
 }

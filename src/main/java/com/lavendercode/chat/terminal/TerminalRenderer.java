@@ -189,6 +189,9 @@ public class TerminalRenderer {
                 if (done != null) done.countDown();
             }
             case RenderEvent.RefreshAll() -> drawFull();
+            case RenderEvent.CompletionMenu(var entries, int selected, boolean visible) -> {
+                // Rendering will be implemented in Task 12
+            }
             case RenderEvent.Shutdown() -> { /* handled in run() */ }
         }
     }
