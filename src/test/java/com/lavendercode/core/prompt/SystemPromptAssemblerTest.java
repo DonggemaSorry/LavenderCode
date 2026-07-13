@@ -41,6 +41,39 @@ class SystemPromptAssemblerTest {
     }
 
     @Test
+    void threeArgAddsFileInstructionsAndMemoryInOrder() {
+        String result = SystemPromptAssembler.assemble(
+            "Config prompt.",
+            "File instructions.",
+            "Memory index.");
+
+        assertThat(result).contains("Config prompt.");
+        assertThat(result).contains("File instructions.");
+        assertThat(result).endsWith("Memory index.");
+        assertThat(result).containsSubsequence(
+            "Text Output",
+            "Config prompt.",
+            "File instructions.",
+            "Memory index.");
+    }
+
+    @Test
+    void blankOptionalModulesSkipped() {
+        String result = SystemPromptAssembler.assemble(" ", "\n", "\t");
+
+        assertThat(result).doesNotContain("custom-instructions");
+        assertThat(result).doesNotContain("file-instructions");
+        assertThat(result).doesNotContain("long-term-memory");
+        assertThat(result).endsWith("4. Keep output structured and readable.");
+    }
+
+    @Test
+    void singleArgDelegates() {
+        assertThat(SystemPromptAssembler.assemble("Config prompt."))
+            .isEqualTo(SystemPromptAssembler.assemble("Config prompt.", null, null));
+    }
+
+    @Test
     void twoCallsProduceIdenticalBytes() {
         String a = SystemPromptAssembler.assemble(null);
         String b = SystemPromptAssembler.assemble(null);

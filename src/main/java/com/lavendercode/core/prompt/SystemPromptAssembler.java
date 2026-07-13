@@ -54,9 +54,19 @@ public class SystemPromptAssembler {
     );
 
     public static String assemble(String customInstructions) {
+        return assemble(customInstructions, null, null);
+    }
+
+    public static String assemble(String configPrompt, String fileInstructions, String memoryIndex) {
         var modules = new ArrayList<>(FIXED);
-        if (customInstructions != null && !customInstructions.isBlank()) {
-            modules.add(new PromptModule("custom-instructions", 8, customInstructions));
+        if (configPrompt != null && !configPrompt.isBlank()) {
+            modules.add(new PromptModule("custom-instructions", 8, configPrompt));
+        }
+        if (fileInstructions != null && !fileInstructions.isBlank()) {
+            modules.add(new PromptModule("file-instructions", 9, fileInstructions));
+        }
+        if (memoryIndex != null && !memoryIndex.isBlank()) {
+            modules.add(new PromptModule("long-term-memory", 10, memoryIndex));
         }
         return modules.stream()
             .sorted(Comparator.comparingInt(PromptModule::priority))
