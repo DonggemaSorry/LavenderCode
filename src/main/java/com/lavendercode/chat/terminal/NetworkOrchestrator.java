@@ -41,36 +41,39 @@ public class NetworkOrchestrator {
 
     private static final String APP_VERSION = "1.0.0";
 
-    private final DeltaBuffer deltaBuffer;
-    private final BlockingQueue<RenderEvent> renderQueue;
-    private final BlockingQueue<InputEvent> inputQueue;
-    private final SessionManager sessionManager;
+    final DeltaBuffer deltaBuffer;
+    final BlockingQueue<RenderEvent> renderQueue;
+    final BlockingQueue<InputEvent> inputQueue;
+    final SessionManager sessionManager;
     private final LlmProvider provider;
-    private final String modelName;
+    final String modelName;
     private final LlmConfig config;
-    private final Options options;
+    final Options options;
     private final ScheduledExecutorService timerScheduler;
-    private final Path projectRoot;
-    private final SessionHandle handle;
+    final Path projectRoot;
+    final SessionHandle handle;
 
     private final BatchingToolExecutor batchExecutor;
-    private final TokenAccumulator tokenAccumulator = new TokenAccumulator();
-    private final PermissionModeManager modeManager;
+    final TokenAccumulator tokenAccumulator = new TokenAccumulator();
+    final PermissionModeManager modeManager;
     private final HitlCoordinator hitlCoordinator;
     private final PermissionPipeline permissionPipeline;
-    private final ContextManager contextManager;
+    final ContextManager contextManager;
     private final String fileInstructions;
     private final Supplier<String> memoryIndexSupplier;
-    private final MemoryService memoryService;
+    final MemoryService memoryService;
     private final ReentrantLock sessionLock = new ReentrantLock();
 
-    private volatile ReActLoop currentLoop;
+    volatile ReActLoop currentLoop;
     private volatile Thread loopThread;
     private volatile ScheduledFuture<?> timerTask;
     private volatile ResponseTimer currentTimer;
     private volatile boolean resuming;
-    private volatile int turnCount;
+    volatile int turnCount;
     private volatile String lastUserMessage = "";
+
+    private com.lavendercode.core.command.CommandRegistry commandRegistry;
+    private com.lavendercode.core.command.CommandContext commandContext;
 
     public NetworkOrchestrator(DeltaBuffer deltaBuffer,
                                BlockingQueue<RenderEvent> renderQueue,
@@ -277,7 +280,13 @@ public class NetworkOrchestrator {
         }
     }
 
-    private void handleSendMessage(InputEvent.SendMessage msg) {
+    public void bindCommandSystem(com.lavendercode.core.command.CommandRegistry registry,
+                                   com.lavendercode.core.command.CommandContext context) {
+        this.commandRegistry = registry;
+        this.commandContext = context;
+    }
+
+    void handleSendMessage(InputEvent.SendMessage msg) {
         if (currentLoop != null || resuming) {
             return;
         }
@@ -384,7 +393,7 @@ public class NetworkOrchestrator {
         return memoryService != null ? memoryService.currentIndex() : memoryIndexSupplier.get();
     }
 
-    private void handleResumeSession(String sessionId) {
+    void handleResumeSession(String sessionId) {
         String blocked = ResumeGate.check(isAgentRunning(), resuming);
         if (blocked != null) {
             safePut(new RenderEvent.AddSystemMessage("[" + blocked + "]"));
@@ -524,7 +533,7 @@ public class NetworkOrchestrator {
         return false;
     }
 
-    private void handleCompact() {
+    void handleCompact() {
         sessionLock.lock();
         try {
             List<ToolDefinition> toolDefs = ToolDescriptionEnhancer.enhance(
@@ -542,7 +551,7 @@ public class NetworkOrchestrator {
         }
     }
 
-    private void handleShutdown() {
+    void handleShutdown() {
         if (currentLoop != null) {
             currentLoop.cancel();
         }
@@ -593,7 +602,7 @@ public class NetworkOrchestrator {
         }
     }
 
-    private RenderEvent parseScrollEvent(String args) {
+    RenderEvent parseScrollEvent(String args) {
         return switch (args.trim().toLowerCase()) {
             case "up"        -> new RenderEvent.ScrollDelta(-1);
             case "down"      -> new RenderEvent.ScrollDelta(1);
@@ -605,7 +614,7 @@ public class NetworkOrchestrator {
         };
     }
 
-    private void safePut(RenderEvent event) {
+    void safePut(RenderEvent event) {
         try {
             renderQueue.put(event);
         } catch (InterruptedException e) {
