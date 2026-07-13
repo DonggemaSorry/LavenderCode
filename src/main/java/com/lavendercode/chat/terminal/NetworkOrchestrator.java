@@ -533,6 +533,37 @@ public class NetworkOrchestrator {
         return false;
     }
 
+    private boolean handleCommand(String rawInput) {
+        String trimmed = rawInput.trim();
+        if (trimmed.isEmpty()) return false;
+        String body = trimmed.substring(1).trim();
+        String cmdName = body.split("\\s+", 2)[0].toLowerCase();
+        var found = commandRegistry.find(cmdName);
+        if (found.isEmpty()) {
+            deltaBuffer.forceFlush();
+            safePut(new RenderEvent.AddSystemMessage(
+                "未知命令: /" + cmdName + "。输入 /help 查看可用命令"));
+            safePut(new RenderEvent.FinalizeMessage());
+            return false;
+        }
+        var def = found.get();
+        var kind = def.metadata().kind();
+        if (kind != com.lavendercode.core.command.CommandKind.LOCAL && currentLoop != null) {
+            safePut(new RenderEvent.AddSystemMessage("[请等待当前任务完成]"));
+            safePut(new RenderEvent.FinalizeMessage());
+            return false;
+        }
+        try {
+            def.handler().execute(commandContext);
+        } catch (Exception e) {
+            safePut(new RenderEvent.AddSystemMessage(
+                "[命令执行异常: " + e.getMessage() + "]"));
+            safePut(new RenderEvent.FinalizeMessage());
+        }
+        return kind == com.lavendercode.core.command.CommandKind.UI
+            && def.metadata().name().equals("exit");
+    }
+
     void handleCompact() {
         sessionLock.lock();
         try {
