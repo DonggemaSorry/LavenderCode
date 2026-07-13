@@ -9,6 +9,7 @@ import org.jline.terminal.Terminal;
 import java.io.Closeable;
 import java.nio.file.Path;
 import java.util.concurrent.*;
+import java.util.function.Supplier;
 
 /**
  * Orchestrates the four-thread terminal chat application lifecycle.
@@ -24,6 +25,8 @@ public class TerminalChatApplication {
     private final Path projectRoot;
     private final ContextManager contextManager;
     private final Closeable closeOnShutdown;
+    private final String fileInstructions;
+    private final Supplier<String> memoryIndexSupplier;
 
     public TerminalChatApplication(SessionManager sessionManager,
                                    LlmProvider provider,
@@ -56,6 +59,21 @@ public class TerminalChatApplication {
                                    Path projectRoot,
                                    ContextManager contextManager,
                                    Closeable closeOnShutdown) {
+        this(sessionManager, provider, providerName, modelName, config, theme, projectRoot,
+            contextManager, closeOnShutdown, "", () -> "");
+    }
+
+    public TerminalChatApplication(SessionManager sessionManager,
+                                   LlmProvider provider,
+                                   String providerName,
+                                   String modelName,
+                                   LlmConfig config,
+                                   Theme theme,
+                                   Path projectRoot,
+                                   ContextManager contextManager,
+                                   Closeable closeOnShutdown,
+                                   String fileInstructions,
+                                   Supplier<String> memoryIndexSupplier) {
         this.sessionManager = sessionManager;
         this.provider = provider;
         this.providerName = providerName;
@@ -65,6 +83,8 @@ public class TerminalChatApplication {
         this.projectRoot = projectRoot;
         this.contextManager = contextManager != null ? contextManager : com.lavendercode.core.context.NoOpContextManager.INSTANCE;
         this.closeOnShutdown = closeOnShutdown;
+        this.fileInstructions = fileInstructions != null ? fileInstructions : "";
+        this.memoryIndexSupplier = memoryIndexSupplier != null ? memoryIndexSupplier : () -> "";
     }
 
     public TerminalChatApplication(SessionManager sessionManager,
@@ -92,7 +112,7 @@ public class TerminalChatApplication {
         NetworkOrchestrator orchestrator = new NetworkOrchestrator(
             deltaBuffer, renderQueue, inputQueue,
             sessionManager, provider, providerName, modelName, config,
-            timerScheduler, projectRoot, contextManager
+            timerScheduler, projectRoot, contextManager, fileInstructions, memoryIndexSupplier
         );
         InputAreaLayout inputLayout = new InputAreaLayout();
         TerminalRenderer renderer = new TerminalRenderer(

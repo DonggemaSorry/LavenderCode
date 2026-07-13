@@ -17,6 +17,7 @@ import com.lavendercode.core.context.SessionHandle;
 import com.lavendercode.core.mcp.McpBootstrap;
 import com.lavendercode.core.mcp.McpSessionManager;
 import com.lavendercode.core.mcp.McpShutdownHook;
+import com.lavendercode.core.prompt.InstructionLoader;
 import com.lavendercode.core.provider.LlmProvider;
 import com.lavendercode.core.provider.ProviderRegistry;
 import com.lavendercode.core.tool.*;
@@ -78,6 +79,7 @@ public class LavenderCode {
         }
 
         Path projectRoot = Path.of("").toAbsolutePath().normalize();
+        String instructions = InstructionLoader.load(projectRoot);
         McpSessionManager mcpSessions = new McpSessionManager();
         McpShutdownHook.register(mcpSessions);
         try {
@@ -97,7 +99,9 @@ public class LavenderCode {
                 Theme.dark(),
                 projectRoot,
                 contextManager,
-                writer
+                writer,
+                instructions,
+                () -> ""
             );
             app.run(terminal);
         } finally {

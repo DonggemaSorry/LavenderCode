@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 public class NetworkOrchestrator {
 
@@ -45,6 +46,8 @@ public class NetworkOrchestrator {
     private final HitlCoordinator hitlCoordinator;
     private final PermissionPipeline permissionPipeline;
     private final ContextManager contextManager;
+    private final String fileInstructions;
+    private final Supplier<String> memoryIndexSupplier;
     private final ReentrantLock sessionLock = new ReentrantLock();
 
     private volatile ReActLoop currentLoop;
@@ -72,6 +75,20 @@ public class NetworkOrchestrator {
                                ScheduledExecutorService timerScheduler,
                                Path projectRoot,
                                ContextManager contextManager) {
+        this(deltaBuffer, renderQueue, inputQueue, sessionManager, provider,
+            providerName, modelName, config, timerScheduler, projectRoot, contextManager, "", () -> "");
+    }
+
+    public NetworkOrchestrator(DeltaBuffer deltaBuffer,
+                               BlockingQueue<RenderEvent> renderQueue,
+                               BlockingQueue<InputEvent> inputQueue,
+                               SessionManager sessionManager, LlmProvider provider,
+                               String providerName, String modelName, LlmConfig config,
+                               ScheduledExecutorService timerScheduler,
+                               Path projectRoot,
+                               ContextManager contextManager,
+                               String fileInstructions,
+                               Supplier<String> memoryIndexSupplier) {
         this.deltaBuffer = deltaBuffer;
         this.renderQueue = renderQueue;
         this.inputQueue = inputQueue;
@@ -99,6 +116,8 @@ public class NetworkOrchestrator {
             projectRoot);
         this.contextManager = contextManager != null ? contextManager : com.lavendercode.core.context.NoOpContextManager.INSTANCE;
         this.contextManager.setEventSink(this::onContextEvent);
+        this.fileInstructions = fileInstructions != null ? fileInstructions : "";
+        this.memoryIndexSupplier = memoryIndexSupplier != null ? memoryIndexSupplier : () -> "";
     }
 
     private void onContextEvent(ContextEvent event) {
@@ -159,7 +178,8 @@ public class NetworkOrchestrator {
         deltaBuffer.forceFlush();
         safePut(new RenderEvent.AddUserMessage(msg.text()));
 
-        String stablePrompt = SystemPromptAssembler.assemble(options.systemPrompt());
+        String stablePrompt = SystemPromptAssembler.assemble(
+            options.systemPrompt(), fileInstructions, memoryIndexSupplier.get());
         String envInfo = EnvironmentInfoCollector.collect(modelName, APP_VERSION);
         List<ToolDefinition> toolDefs = ToolDescriptionEnhancer.enhance(
             modeManager.getToolDefinitions(options.toolSystemEnabled()));
