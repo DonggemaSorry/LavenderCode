@@ -1,8 +1,9 @@
 # 项目记忆与会话持久化 — 设计文档
 
 > 日期：2026-07-13  
-> 状态：待用户审阅书面稿（brainstorming 设计节已口头确认）  
+> 状态：实现已完成（分支 `feat/ch09-project-memory`）  
 > 关联 PRD：`docs/current/modules/memory/PRD_项目记忆与会话持久化.md`  
+> 关联计划：`docs/superpowers/plans/2026-07-13-project-memory-session-persistence.md`  
 > 实现策略：方案 1 — 装饰 `SessionManager` + 独立服务；类型名对齐现有 LavenderCode
 
 ---
