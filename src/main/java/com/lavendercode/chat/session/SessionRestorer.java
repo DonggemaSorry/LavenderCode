@@ -203,8 +203,12 @@ public final class SessionRestorer {
         if (!node.hasNonNull("ts")) {
             return null;
         }
+        JsonNode ts = node.get("ts");
         try {
-            return Instant.parse(node.get("ts").asText());
+            if (ts.isNumber()) {
+                return Instant.ofEpochSecond(ts.asLong());
+            }
+            return Instant.parse(ts.asText());
         } catch (Exception ignored) {
             return null;
         }

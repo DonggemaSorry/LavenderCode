@@ -12,6 +12,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.List;
 import java.util.function.Consumer;
@@ -80,6 +81,36 @@ class SessionRestorerTest {
     }
 
     @Test
+    void readsWriterNumericTimestampAsLastTimestamp(@TempDir Path dir) throws Exception {
+        Path jsonl = dir.resolve("conversation.jsonl");
+        try (SessionTranscriptWriter writer = SessionTranscriptWriter.open(jsonl)) {
+            writer.appendMessage(Role.USER, "round trip", null, null, "test-model");
+        }
+
+        Instant lastTimestamp = lastTimestamp(jsonl);
+
+        assertThat(lastTimestamp).isNotNull();
+        assertThat(SessionRestorer.parseMessages(jsonl))
+            .extracting(Message::content)
+            .containsExactly("round trip");
+    }
+
+    @Test
+    void numericOldTimestampProducesStaleSessionReminder(@TempDir Path dir) throws Exception {
+        long oldEpochSeconds = Instant.now().minusSeconds(7 * 60 * 60).getEpochSecond();
+        Path jsonl = write(dir, """
+            {"type":"message","ts":%d,"role":"user","content":"old numeric question"}
+            """.formatted(oldEpochSeconds));
+
+        RestoreResult result = SessionRestorer.restore(jsonl, new RecordingContextManager(), 128_000, new TokenEstimator());
+
+        assertThat(result.timeSpanReminderOrNull()).contains("[系统提示] 本会话已暂停");
+        assertThat(result.messages()).hasSize(2);
+        assertThat(result.messages().get(0).content()).isEqualTo("old numeric question");
+        assertThat(result.messages().get(1).content()).isEqualTo(result.timeSpanReminderOrNull());
+    }
+
+    @Test
     void maybeCompactRunsManualCompactionWhenEstimateExceedsThreshold() {
         SessionManager sessionManager = new InMemorySessionManager();
         sessionManager.addUserMessage("large enough");
@@ -95,6 +126,15 @@ class SessionRestorerTest {
         Path jsonl = dir.resolve("conversation.jsonl");
         Files.writeString(jsonl, content);
         return jsonl;
+    }
+
+    private static Instant lastTimestamp(Path jsonl) throws Exception {
+        Method parseTranscript = SessionRestorer.class.getDeclaredMethod("parseTranscript", Path.class);
+        parseTranscript.setAccessible(true);
+        Object transcript = parseTranscript.invoke(null, jsonl);
+        Method lastTimestamp = transcript.getClass().getDeclaredMethod("lastTimestamp");
+        lastTimestamp.setAccessible(true);
+        return (Instant) lastTimestamp.invoke(transcript);
     }
 
     private static final class RecordingContextManager implements ContextManager {
