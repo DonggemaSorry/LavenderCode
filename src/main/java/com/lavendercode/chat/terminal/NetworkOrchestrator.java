@@ -278,7 +278,7 @@ public class NetworkOrchestrator {
     }
 
     private void handleSendMessage(InputEvent.SendMessage msg) {
-        if (currentLoop != null) {
+        if (currentLoop != null || resuming) {
             return;
         }
 
@@ -501,6 +501,7 @@ public class NetworkOrchestrator {
             }
             case COMPACT -> handleCompact();
             case RESUME -> {
+                // Fallback path when a RESUME command reaches the orchestrator instead of the picker.
                 String blocked = ResumeGate.check(isAgentRunning(), resuming);
                 if (blocked != null) {
                     safePut(new RenderEvent.AddSystemMessage("[" + blocked + "]"));

@@ -13,16 +13,22 @@ import com.lavendercode.core.prompt.PromptContext;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class MemoryService {
     private static final int MAX_INDEX_CHARS = 25 * 1024;
     private static final String TRUNCATED_MARKER = "\n(index truncated)";
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final Logger logger = Logger.getLogger(MemoryService.class.getName());
 
     private final Path projectMemoryDir;
     private final Path userMemoryDir;
@@ -97,7 +103,8 @@ public class MemoryService {
                 List<MemoryAction> actions = parseActions(response);
                 applyActions(actions);
                 loadIndex();
-            } catch (Throwable ignored) {
+            } catch (Throwable e) {
+                logger.log(Level.WARNING, "Memory update failed: " + e.getMessage(), e);
                 // Memory updates must never affect the foreground chat turn.
             }
         });
@@ -166,7 +173,11 @@ public class MemoryService {
         }
 
         if ("create".equals(normalized) || "update".equals(normalized)) {
-            Files.writeString(note, renderNote(action));
+            String now = OffsetDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+            String created = "update".equals(normalized)
+                ? frontmatterValue(note, "created").orElse(now)
+                : now;
+            Files.writeString(note, renderNote(action, created, now));
             upsertIndexLine(memoryDir, action, indexLine(action));
         }
     }
@@ -179,13 +190,15 @@ public class MemoryService {
         return action.type().name() + "_" + action.slug() + ".md";
     }
 
-    private static String renderNote(MemoryAction action) {
+    private static String renderNote(MemoryAction action, String created, String updated) {
         return """
             ---
             level: %s
             type: %s
             title: %s
             slug: %s
+            created: %s
+            updated: %s
             ---
 
             %s
@@ -194,7 +207,24 @@ public class MemoryService {
             action.type().name(),
             value(action.title()),
             value(action.slug()),
+            value(created),
+            value(updated),
             value(action.content()));
+    }
+
+    private static Optional<String> frontmatterValue(Path note, String key) {
+        if (!Files.isRegularFile(note)) {
+            return Optional.empty();
+        }
+        try {
+            return Files.readAllLines(note).stream()
+                .filter(line -> line.startsWith(key + ": "))
+                .map(line -> line.substring((key + ": ").length()).trim())
+                .filter(value -> !value.isBlank())
+                .findFirst();
+        } catch (IOException ignored) {
+            return Optional.empty();
+        }
     }
 
     private void upsertIndexLine(Path memoryDir, MemoryAction action, String replacement) throws IOException {

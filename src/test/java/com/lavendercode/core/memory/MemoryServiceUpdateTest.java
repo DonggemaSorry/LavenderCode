@@ -18,6 +18,11 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -54,13 +59,21 @@ class MemoryServiceUpdateTest {
 
         Path note = projectRoot.resolve(".lavendercode/memory/project_knowledge_build_command.md");
         Path index = projectRoot.resolve(".lavendercode/memory/MEMORY.md");
-        assertThat(Files.readString(note)).contains(
+        String createdNote = Files.readString(note);
+        assertThat(createdNote).contains(
             "type: project_knowledge",
             "title: Build command",
+            "created: ",
+            "updated: ",
             "Use mvn test for verification.");
+        String originalCreated = frontmatterValue(createdNote, "created");
+        String originalUpdated = frontmatterValue(createdNote, "updated");
+        assertThat(originalCreated).isNotBlank();
+        assertThat(originalUpdated).isNotBlank();
         assertThat(Files.readString(index))
             .contains("- [project_knowledge] Build command — Use mvn test for verification.");
 
+        Thread.sleep(10);
         service.applyActions(service.parseActions("""
             [
               {
@@ -75,7 +88,10 @@ class MemoryServiceUpdateTest {
             ]
             """));
 
-        assertThat(Files.readString(note)).contains("Use mvn -q test before completion.");
+        String updatedNote = Files.readString(note);
+        assertThat(updatedNote).contains("Use mvn -q test before completion.");
+        assertThat(frontmatterValue(updatedNote, "created")).isEqualTo(originalCreated);
+        assertThat(frontmatterValue(updatedNote, "updated")).isNotEqualTo(originalUpdated);
         assertThat(Files.readString(index))
             .doesNotContain("Use mvn test for verification.")
             .contains("- [project_knowledge] Build command — Use mvn -q test before completion.");
@@ -119,6 +135,42 @@ class MemoryServiceUpdateTest {
         assertThatCode(() -> service.maybeUpdateAsync(
             provider, config(), List.of(new Message(Role.USER, "remember this")), 1, "remember this"))
             .doesNotThrowAnyException();
+    }
+
+    @Test
+    void updateFailureIsLoggedAtWarningLevel() throws Exception {
+        MemoryService service = new MemoryService(projectRoot, userHome);
+        LlmProvider provider = new ThrowingProvider();
+        Logger logger = Logger.getLogger(MemoryService.class.getName());
+        CountDownLatch logged = new CountDownLatch(1);
+        AtomicReference<LogRecord> record = new AtomicReference<>();
+        Handler handler = new Handler() {
+            @Override
+            public void publish(LogRecord logRecord) {
+                record.set(logRecord);
+                logged.countDown();
+            }
+
+            @Override
+            public void flush() {
+            }
+
+            @Override
+            public void close() {
+            }
+        };
+        logger.addHandler(handler);
+        try {
+            service.maybeUpdateAsync(
+                provider, config(), List.of(new Message(Role.USER, "remember this")), 1, "remember this");
+
+            assertThat(logged.await(1, TimeUnit.SECONDS)).isTrue();
+            assertThat(record.get().getLevel()).isEqualTo(Level.WARNING);
+            assertThat(record.get().getMessage()).contains("boom");
+            assertThat(record.get().getThrown()).isInstanceOf(IllegalStateException.class);
+        } finally {
+            logger.removeHandler(handler);
+        }
     }
 
     @Test
@@ -174,6 +226,14 @@ class MemoryServiceUpdateTest {
             Thread.sleep(25);
         }
         throw new AssertionError("Timed out waiting for current index to contain " + text);
+    }
+
+    private static String frontmatterValue(String note, String key) {
+        return note.lines()
+            .filter(line -> line.startsWith(key + ": "))
+            .map(line -> line.substring((key + ": ").length()))
+            .findFirst()
+            .orElse("");
     }
 
     private static LlmConfig config() {
