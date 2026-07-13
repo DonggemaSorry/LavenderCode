@@ -1,18 +1,28 @@
 package com.lavendercode.chat.terminal;
 
+import com.lavendercode.chat.session.PersistingSessionManager;
+import com.lavendercode.chat.session.RestoreResult;
 import com.lavendercode.chat.session.SessionManager;
+import com.lavendercode.chat.session.SessionRestorer;
+import com.lavendercode.chat.session.SessionTranscriptWriter;
 import com.lavendercode.core.config.LlmConfig;
 import com.lavendercode.core.config.Options;
+import com.lavendercode.core.config.ProviderConfig;
 import com.lavendercode.core.context.CompactTrigger;
 import com.lavendercode.core.context.ContextEvent;
+import com.lavendercode.core.context.ContextWindowDefaults;
 import com.lavendercode.core.context.ContextManager;
+import com.lavendercode.core.context.SessionHandle;
+import com.lavendercode.core.context.TokenEstimator;
 import com.lavendercode.core.permission.*;
+import com.lavendercode.core.provider.Message;
 import com.lavendercode.core.provider.LlmProvider;
 import com.lavendercode.core.tool.ToolDefinition;
 import com.lavendercode.core.prompt.SystemPromptAssembler;
 import com.lavendercode.core.prompt.EnvironmentInfoCollector;
 import com.lavendercode.core.prompt.ToolDescriptionEnhancer;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +49,8 @@ public class NetworkOrchestrator {
     private final LlmConfig config;
     private final Options options;
     private final ScheduledExecutorService timerScheduler;
+    private final Path projectRoot;
+    private final SessionHandle handle;
 
     private final BatchingToolExecutor batchExecutor;
     private final TokenAccumulator tokenAccumulator = new TokenAccumulator();
@@ -54,6 +66,7 @@ public class NetworkOrchestrator {
     private volatile Thread loopThread;
     private volatile ScheduledFuture<?> timerTask;
     private volatile ResponseTimer currentTimer;
+    private volatile boolean resuming;
 
     public NetworkOrchestrator(DeltaBuffer deltaBuffer,
                                BlockingQueue<RenderEvent> renderQueue,
@@ -89,6 +102,22 @@ public class NetworkOrchestrator {
                                ContextManager contextManager,
                                String fileInstructions,
                                Supplier<String> memoryIndexSupplier) {
+        this(deltaBuffer, renderQueue, inputQueue, sessionManager, provider,
+            providerName, modelName, config, timerScheduler, projectRoot, contextManager,
+            fileInstructions, memoryIndexSupplier, null);
+    }
+
+    public NetworkOrchestrator(DeltaBuffer deltaBuffer,
+                               BlockingQueue<RenderEvent> renderQueue,
+                               BlockingQueue<InputEvent> inputQueue,
+                               SessionManager sessionManager, LlmProvider provider,
+                               String providerName, String modelName, LlmConfig config,
+                               ScheduledExecutorService timerScheduler,
+                               Path projectRoot,
+                               ContextManager contextManager,
+                               String fileInstructions,
+                               Supplier<String> memoryIndexSupplier,
+                               SessionHandle handle) {
         this.deltaBuffer = deltaBuffer;
         this.renderQueue = renderQueue;
         this.inputQueue = inputQueue;
@@ -98,6 +127,8 @@ public class NetworkOrchestrator {
         this.config = config;
         this.options = config.options();
         this.timerScheduler = timerScheduler;
+        this.projectRoot = projectRoot;
+        this.handle = handle;
 
         PermissionConfig permConfig = PermissionConfigLoader.load(
             projectRoot,
@@ -136,6 +167,14 @@ public class NetworkOrchestrator {
         return hitlCoordinator;
     }
 
+    public boolean isAgentRunning() {
+        return currentLoop != null;
+    }
+
+    public boolean isResuming() {
+        return resuming;
+    }
+
     public void run() {
         safePut(new RenderEvent.StatusUpdate(modeManager.getMode().label(), modelName, "", 0));
         try {
@@ -147,6 +186,7 @@ public class NetworkOrchestrator {
 
                 switch (event) {
                     case InputEvent.SendMessage msg -> handleSendMessage(msg);
+                    case InputEvent.ResumeSession resume -> handleResumeSession(resume.sessionId());
                     case InputEvent.ExecuteCommand cmd -> {
                         if (handleCommand(cmd)) {
                             return;
@@ -267,6 +307,78 @@ public class NetworkOrchestrator {
         }
     }
 
+    private void handleResumeSession(String sessionId) {
+        String blocked = ResumeGate.check(isAgentRunning(), resuming);
+        if (blocked != null) {
+            safePut(new RenderEvent.AddSystemMessage("[" + blocked + "]"));
+            safePut(new RenderEvent.FinalizeMessage());
+            return;
+        }
+
+        resuming = true;
+        sessionLock.lock();
+        try {
+            Path jsonl = projectRoot.resolve(".lavendercode/sessions")
+                .resolve(sessionId)
+                .resolve("conversation.jsonl");
+            RestoreResult result = SessionRestorer.restore(
+                jsonl, contextManager, contextWindow(), new TokenEstimator());
+
+            String reminder = result.timeSpanReminderOrNull();
+            List<Message> messagesForHistory = withoutTrailingReminder(result.messages(), reminder);
+
+            if (sessionManager instanceof PersistingSessionManager persisting && handle != null) {
+                persisting.suspendPersistence();
+                try {
+                    persisting.replaceHistory(messagesForHistory);
+                } finally {
+                    persisting.resumePersistence();
+                }
+                handle.rebind(sessionId);
+                persisting.swapWriter(SessionTranscriptWriter.open(handle.paths().conversationJsonl()));
+                if (reminder != null) {
+                    persisting.addUserMessage(reminder);
+                }
+            } else {
+                sessionManager.replaceHistory(result.messages());
+            }
+
+            boolean compacted = result.compacted()
+                || SessionRestorer.maybeCompact(sessionManager, contextManager, contextWindow(), new TokenEstimator());
+            int count = sessionManager.getMessageCount();
+            safePut(new RenderEvent.AddSystemMessage(
+                "[已恢复会话 " + sessionId + "，共 " + count + " 条消息" + (compacted ? "，已压缩上下文" : "") + "]"));
+            safePut(new RenderEvent.FinalizeMessage());
+        } catch (IOException e) {
+            safePut(new RenderEvent.AddSystemMessage("[恢复会话失败: " + e.getMessage() + "]"));
+            safePut(new RenderEvent.FinalizeMessage());
+        } finally {
+            sessionLock.unlock();
+            resuming = false;
+        }
+    }
+
+    private static List<Message> withoutTrailingReminder(List<Message> messages, String reminder) {
+        if (reminder == null || messages.isEmpty()) {
+            return messages;
+        }
+        Message last = messages.get(messages.size() - 1);
+        if (reminder.equals(last.content())) {
+            return List.copyOf(messages.subList(0, messages.size() - 1));
+        }
+        return messages;
+    }
+
+    private int contextWindow() {
+        for (ProviderConfig providerConfig : config.providers()) {
+            if (modelName.equals(providerConfig.model())) {
+                return ContextWindowDefaults.resolve(providerConfig.protocol(), providerConfig.contextWindow());
+            }
+        }
+        String protocol = provider != null ? provider.protocol() : "";
+        return ContextWindowDefaults.resolve(protocol, null);
+    }
+
     private boolean handleCommand(InputEvent.ExecuteCommand cmd) {
         switch (cmd.type()) {
             case CANCEL -> {
@@ -311,6 +423,13 @@ public class NetworkOrchestrator {
                 safePut(new RenderEvent.AddSystemMessage(BuiltinCommandRegistry.helpText()));
             }
             case COMPACT -> handleCompact();
+            case RESUME -> {
+                String blocked = ResumeGate.check(isAgentRunning(), resuming);
+                if (blocked != null) {
+                    safePut(new RenderEvent.AddSystemMessage("[" + blocked + "]"));
+                    safePut(new RenderEvent.FinalizeMessage());
+                }
+            }
             case UNKNOWN -> {
                 deltaBuffer.forceFlush();
                 safePut(new RenderEvent.AddSystemMessage("[" + cmd.args() + "]"));

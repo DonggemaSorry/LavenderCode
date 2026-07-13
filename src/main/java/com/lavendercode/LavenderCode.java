@@ -101,6 +101,7 @@ public class LavenderCode {
                 Theme.dark(),
                 projectRoot,
                 contextManager,
+                handle,
                 writer,
                 instructions,
                 () -> ""

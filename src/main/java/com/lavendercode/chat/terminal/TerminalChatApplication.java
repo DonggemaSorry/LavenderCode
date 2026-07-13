@@ -3,6 +3,7 @@ package com.lavendercode.chat.terminal;
 import com.lavendercode.chat.session.SessionManager;
 import com.lavendercode.core.config.LlmConfig;
 import com.lavendercode.core.context.ContextManager;
+import com.lavendercode.core.context.SessionHandle;
 import com.lavendercode.core.provider.LlmProvider;
 import org.jline.terminal.Terminal;
 
@@ -24,6 +25,7 @@ public class TerminalChatApplication {
     private final Theme theme;
     private final Path projectRoot;
     private final ContextManager contextManager;
+    private final SessionHandle sessionHandle;
     private final Closeable closeOnShutdown;
     private final String fileInstructions;
     private final Supplier<String> memoryIndexSupplier;
@@ -60,7 +62,7 @@ public class TerminalChatApplication {
                                    ContextManager contextManager,
                                    Closeable closeOnShutdown) {
         this(sessionManager, provider, providerName, modelName, config, theme, projectRoot,
-            contextManager, closeOnShutdown, "", () -> "");
+            contextManager, null, closeOnShutdown, "", () -> "");
     }
 
     public TerminalChatApplication(SessionManager sessionManager,
@@ -74,6 +76,22 @@ public class TerminalChatApplication {
                                    Closeable closeOnShutdown,
                                    String fileInstructions,
                                    Supplier<String> memoryIndexSupplier) {
+        this(sessionManager, provider, providerName, modelName, config, theme, projectRoot,
+            contextManager, null, closeOnShutdown, fileInstructions, memoryIndexSupplier);
+    }
+
+    public TerminalChatApplication(SessionManager sessionManager,
+                                   LlmProvider provider,
+                                   String providerName,
+                                   String modelName,
+                                   LlmConfig config,
+                                   Theme theme,
+                                   Path projectRoot,
+                                   ContextManager contextManager,
+                                   SessionHandle sessionHandle,
+                                   Closeable closeOnShutdown,
+                                   String fileInstructions,
+                                   Supplier<String> memoryIndexSupplier) {
         this.sessionManager = sessionManager;
         this.provider = provider;
         this.providerName = providerName;
@@ -82,6 +100,7 @@ public class TerminalChatApplication {
         this.theme = theme;
         this.projectRoot = projectRoot;
         this.contextManager = contextManager != null ? contextManager : com.lavendercode.core.context.NoOpContextManager.INSTANCE;
+        this.sessionHandle = sessionHandle;
         this.closeOnShutdown = closeOnShutdown;
         this.fileInstructions = fileInstructions != null ? fileInstructions : "";
         this.memoryIndexSupplier = memoryIndexSupplier != null ? memoryIndexSupplier : () -> "";
@@ -112,13 +131,15 @@ public class TerminalChatApplication {
         NetworkOrchestrator orchestrator = new NetworkOrchestrator(
             deltaBuffer, renderQueue, inputQueue,
             sessionManager, provider, providerName, modelName, config,
-            timerScheduler, projectRoot, contextManager, fileInstructions, memoryIndexSupplier
+            timerScheduler, projectRoot, contextManager, fileInstructions, memoryIndexSupplier,
+            sessionHandle
         );
         InputAreaLayout inputLayout = new InputAreaLayout();
         TerminalRenderer renderer = new TerminalRenderer(
             terminal, renderQueue, theme, providerName, modelName, inputLayout);
         InputSystem inputSystem = new InputSystem(
-            terminal, inputQueue, renderQueue, inputLayout, orchestrator.hitlCoordinator());
+            terminal, inputQueue, renderQueue, inputLayout, orchestrator.hitlCoordinator(),
+            orchestrator, projectRoot.resolve(".lavendercode/sessions"));
 
         // Threads
         Thread inputThread = new Thread(inputSystem::run, "lavender-input");

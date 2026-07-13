@@ -1,10 +1,14 @@
 package com.lavendercode.chat.terminal;
 
+import com.lavendercode.chat.session.SessionCatalog;
+import com.lavendercode.chat.session.SessionListItem;
 import com.lavendercode.core.permission.HitlChoice;
 import org.jline.terminal.Attributes;
 import org.jline.terminal.Terminal;
 
 import java.io.IOException;
+import java.nio.file.Path;
+import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -22,6 +26,8 @@ public class InputSystem {
     private final BlockingQueue<InputEvent> inputQueue;
     private final BlockingQueue<RenderEvent> renderQueue;
     private final HitlCoordinator hitlCoordinator;
+    private final NetworkOrchestrator orchestrator;
+    private final Path projectSessionsDir;
     private final AtomicBoolean shutdown = new AtomicBoolean(false);
 
     public InputSystem(Terminal terminal,
@@ -29,11 +35,23 @@ public class InputSystem {
                        BlockingQueue<RenderEvent> renderQueue,
                        InputAreaLayout inputLayout,
                        HitlCoordinator hitlCoordinator) {
+        this(terminal, inputQueue, renderQueue, inputLayout, hitlCoordinator, null, null);
+    }
+
+    public InputSystem(Terminal terminal,
+                       BlockingQueue<InputEvent> inputQueue,
+                       BlockingQueue<RenderEvent> renderQueue,
+                       InputAreaLayout inputLayout,
+                       HitlCoordinator hitlCoordinator,
+                       NetworkOrchestrator orchestrator,
+                       Path projectSessionsDir) {
         this.terminal = terminal;
         this.keyReader = new TerminalKeyReader(terminal);
         this.inputQueue = inputQueue;
         this.renderQueue = renderQueue;
         this.hitlCoordinator = hitlCoordinator;
+        this.orchestrator = orchestrator;
+        this.projectSessionsDir = projectSessionsDir;
     }
 
     public InputSystem(Terminal terminal,
@@ -58,7 +76,9 @@ public class InputSystem {
                 }
                 if (line.startsWith("/")) {
                     InputEvent event = parseCommand(line.trim());
-                    inputQueue.offer(event);
+                    if (event != null) {
+                        inputQueue.offer(event);
+                    }
                     if (shouldStopAfter(event)) {
                         shutdown.set(true);
                         break;
@@ -264,6 +284,47 @@ public class InputSystem {
         if (r.type() == InputEvent.CommandType.UNKNOWN) {
             return new InputEvent.ExecuteCommand(InputEvent.CommandType.UNKNOWN, r.hint());
         }
+        if (r.type() == InputEvent.CommandType.RESUME) {
+            return handleResumeCommand();
+        }
         return new InputEvent.ExecuteCommand(r.type(), r.args());
+    }
+
+    private InputEvent handleResumeCommand() {
+        if (orchestrator == null || projectSessionsDir == null) {
+            return new InputEvent.ExecuteCommand(InputEvent.CommandType.RESUME, "");
+        }
+
+        String blocked = ResumeGate.check(orchestrator.isAgentRunning(), orchestrator.isResuming());
+        if (blocked != null) {
+            publishSystemMessage("[" + blocked + "]");
+            return null;
+        }
+
+        try {
+            List<SessionListItem> items = SessionCatalog.list(projectSessionsDir);
+            if (items.isEmpty()) {
+                publishSystemMessage("[没有可恢复的会话]");
+                return null;
+            }
+            SessionListItem selected = SessionPicker.pick(terminal, items);
+            if (selected == null) {
+                publishSystemMessage("[已取消恢复会话]");
+                return null;
+            }
+            return new InputEvent.ResumeSession(selected.sessionId());
+        } catch (IOException e) {
+            publishSystemMessage("[读取会话列表失败: " + e.getMessage() + "]");
+            return null;
+        }
+    }
+
+    private void publishSystemMessage(String text) {
+        try {
+            renderQueue.put(new RenderEvent.AddSystemMessage(text));
+            renderQueue.put(new RenderEvent.FinalizeMessage());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }
