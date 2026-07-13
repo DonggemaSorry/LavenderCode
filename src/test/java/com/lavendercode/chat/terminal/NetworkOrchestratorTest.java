@@ -4,6 +4,7 @@ import com.lavendercode.chat.session.InMemorySessionManager;
 import com.lavendercode.chat.session.SessionManager;
 import com.lavendercode.core.config.LlmConfig;
 import com.lavendercode.core.config.ProviderConfig;
+import com.lavendercode.core.memory.MemoryService;
 import com.lavendercode.core.prompt.PromptContext;
 import com.lavendercode.core.provider.*;
 import org.junit.jupiter.api.AfterEach;
@@ -140,6 +141,32 @@ class NetworkOrchestratorTest {
         thread.join(2_000);
     }
 
+    @Test
+    void completeEventTriggersMemoryUpdateWithLastUserMessage() throws Exception {
+        when(provider.streamChat(any(), any(), any(), any())).thenReturn(completingIterator());
+        RecordingMemoryService memoryService = new RecordingMemoryService(projectRoot);
+        NetworkOrchestrator withMemory = new NetworkOrchestrator(
+            deltaBuffer, renderQueue, inputQueue,
+            sessionManager, provider, "test-provider", "gpt-4", config,
+            scheduler, projectRoot,
+            com.lavendercode.core.context.NoOpContextManager.INSTANCE,
+            "File instructions.",
+            memoryService
+        );
+        Thread thread = new Thread(withMemory::run);
+        thread.start();
+
+        inputQueue.put(new InputEvent.SendMessage("remember the build command"));
+
+        assertThat(memoryService.called.await(2, TimeUnit.SECONDS)).isTrue();
+        assertThat(memoryService.turnCount).isEqualTo(1);
+        assertThat(memoryService.lastUserMessage).isEqualTo("remember the build command");
+        assertThat(memoryService.history).isNotEmpty();
+
+        inputQueue.put(new InputEvent.Shutdown());
+        thread.join(2_000);
+    }
+
     private static StreamEventIterator completingIterator() {
         return new StreamEventIterator() {
             private boolean emitted;
@@ -159,5 +186,27 @@ class NetworkOrchestratorTest {
             public void close() {
             }
         };
+    }
+
+    private static final class RecordingMemoryService extends MemoryService {
+        private final CountDownLatch called = new CountDownLatch(1);
+        private volatile int turnCount;
+        private volatile String lastUserMessage;
+        private volatile List<Message> history = List.of();
+
+        private RecordingMemoryService(Path projectRoot) {
+            super(projectRoot, projectRoot);
+        }
+
+        @Override
+        public void maybeUpdateAsync(LlmProvider provider, LlmConfig config,
+                                     List<Message> recentMessages,
+                                     int turnCount,
+                                     String lastUserMessage) {
+            this.history = recentMessages;
+            this.turnCount = turnCount;
+            this.lastUserMessage = lastUserMessage;
+            called.countDown();
+        }
     }
 }

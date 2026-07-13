@@ -4,6 +4,7 @@ import com.lavendercode.chat.session.SessionManager;
 import com.lavendercode.core.config.LlmConfig;
 import com.lavendercode.core.context.ContextManager;
 import com.lavendercode.core.context.SessionHandle;
+import com.lavendercode.core.memory.MemoryService;
 import com.lavendercode.core.provider.LlmProvider;
 import org.jline.terminal.Terminal;
 
@@ -29,6 +30,7 @@ public class TerminalChatApplication {
     private final Closeable closeOnShutdown;
     private final String fileInstructions;
     private final Supplier<String> memoryIndexSupplier;
+    private final MemoryService memoryService;
 
     public TerminalChatApplication(SessionManager sessionManager,
                                    LlmProvider provider,
@@ -77,7 +79,24 @@ public class TerminalChatApplication {
                                    String fileInstructions,
                                    Supplier<String> memoryIndexSupplier) {
         this(sessionManager, provider, providerName, modelName, config, theme, projectRoot,
-            contextManager, null, closeOnShutdown, fileInstructions, memoryIndexSupplier);
+            contextManager, null, closeOnShutdown, fileInstructions, memoryIndexSupplier, null);
+    }
+
+    public TerminalChatApplication(SessionManager sessionManager,
+                                   LlmProvider provider,
+                                   String providerName,
+                                   String modelName,
+                                   LlmConfig config,
+                                   Theme theme,
+                                   Path projectRoot,
+                                   ContextManager contextManager,
+                                   Closeable closeOnShutdown,
+                                   String fileInstructions,
+                                   MemoryService memoryService) {
+        this(sessionManager, provider, providerName, modelName, config, theme, projectRoot,
+            contextManager, null, closeOnShutdown, fileInstructions,
+            memoryService != null ? memoryService::currentIndex : () -> "",
+            memoryService);
     }
 
     public TerminalChatApplication(SessionManager sessionManager,
@@ -92,6 +111,41 @@ public class TerminalChatApplication {
                                    Closeable closeOnShutdown,
                                    String fileInstructions,
                                    Supplier<String> memoryIndexSupplier) {
+        this(sessionManager, provider, providerName, modelName, config, theme, projectRoot,
+            contextManager, sessionHandle, closeOnShutdown, fileInstructions, memoryIndexSupplier, null);
+    }
+
+    public TerminalChatApplication(SessionManager sessionManager,
+                                   LlmProvider provider,
+                                   String providerName,
+                                   String modelName,
+                                   LlmConfig config,
+                                   Theme theme,
+                                   Path projectRoot,
+                                   ContextManager contextManager,
+                                   SessionHandle sessionHandle,
+                                   Closeable closeOnShutdown,
+                                   String fileInstructions,
+                                   MemoryService memoryService) {
+        this(sessionManager, provider, providerName, modelName, config, theme, projectRoot,
+            contextManager, sessionHandle, closeOnShutdown, fileInstructions,
+            memoryService != null ? memoryService::currentIndex : () -> "",
+            memoryService);
+    }
+
+    private TerminalChatApplication(SessionManager sessionManager,
+                                    LlmProvider provider,
+                                    String providerName,
+                                    String modelName,
+                                    LlmConfig config,
+                                    Theme theme,
+                                    Path projectRoot,
+                                    ContextManager contextManager,
+                                    SessionHandle sessionHandle,
+                                    Closeable closeOnShutdown,
+                                    String fileInstructions,
+                                    Supplier<String> memoryIndexSupplier,
+                                    MemoryService memoryService) {
         this.sessionManager = sessionManager;
         this.provider = provider;
         this.providerName = providerName;
@@ -104,6 +158,7 @@ public class TerminalChatApplication {
         this.closeOnShutdown = closeOnShutdown;
         this.fileInstructions = fileInstructions != null ? fileInstructions : "";
         this.memoryIndexSupplier = memoryIndexSupplier != null ? memoryIndexSupplier : () -> "";
+        this.memoryService = memoryService;
     }
 
     public TerminalChatApplication(SessionManager sessionManager,
@@ -128,12 +183,21 @@ public class TerminalChatApplication {
 
         // Components
         DeltaBuffer deltaBuffer = new DeltaBuffer(timerScheduler, renderQueue);
-        NetworkOrchestrator orchestrator = new NetworkOrchestrator(
-            deltaBuffer, renderQueue, inputQueue,
-            sessionManager, provider, providerName, modelName, config,
-            timerScheduler, projectRoot, contextManager, fileInstructions, memoryIndexSupplier,
-            sessionHandle
-        );
+        NetworkOrchestrator orchestrator = memoryService != null
+            ? new NetworkOrchestrator(
+                deltaBuffer, renderQueue, inputQueue,
+                sessionManager, provider, providerName, modelName, config,
+                timerScheduler, projectRoot, contextManager, fileInstructions,
+                memoryService,
+                sessionHandle
+            )
+            : new NetworkOrchestrator(
+                deltaBuffer, renderQueue, inputQueue,
+                sessionManager, provider, providerName, modelName, config,
+                timerScheduler, projectRoot, contextManager, fileInstructions,
+                memoryIndexSupplier,
+                sessionHandle
+            );
         InputAreaLayout inputLayout = new InputAreaLayout();
         TerminalRenderer renderer = new TerminalRenderer(
             terminal, renderQueue, theme, providerName, modelName, inputLayout);

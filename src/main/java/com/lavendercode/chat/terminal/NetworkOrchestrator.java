@@ -14,6 +14,7 @@ import com.lavendercode.core.context.ContextWindowDefaults;
 import com.lavendercode.core.context.ContextManager;
 import com.lavendercode.core.context.SessionHandle;
 import com.lavendercode.core.context.TokenEstimator;
+import com.lavendercode.core.memory.MemoryService;
 import com.lavendercode.core.permission.*;
 import com.lavendercode.core.provider.Message;
 import com.lavendercode.core.provider.LlmProvider;
@@ -60,6 +61,7 @@ public class NetworkOrchestrator {
     private final ContextManager contextManager;
     private final String fileInstructions;
     private final Supplier<String> memoryIndexSupplier;
+    private final MemoryService memoryService;
     private final ReentrantLock sessionLock = new ReentrantLock();
 
     private volatile ReActLoop currentLoop;
@@ -67,6 +69,8 @@ public class NetworkOrchestrator {
     private volatile ScheduledFuture<?> timerTask;
     private volatile ResponseTimer currentTimer;
     private volatile boolean resuming;
+    private volatile int turnCount;
+    private volatile String lastUserMessage = "";
 
     public NetworkOrchestrator(DeltaBuffer deltaBuffer,
                                BlockingQueue<RenderEvent> renderQueue,
@@ -89,7 +93,8 @@ public class NetworkOrchestrator {
                                Path projectRoot,
                                ContextManager contextManager) {
         this(deltaBuffer, renderQueue, inputQueue, sessionManager, provider,
-            providerName, modelName, config, timerScheduler, projectRoot, contextManager, "", () -> "");
+            providerName, modelName, config, timerScheduler, projectRoot, contextManager,
+            "", new MemoryService(projectRoot, Path.of(System.getProperty("user.home"))));
     }
 
     public NetworkOrchestrator(DeltaBuffer deltaBuffer,
@@ -105,6 +110,21 @@ public class NetworkOrchestrator {
         this(deltaBuffer, renderQueue, inputQueue, sessionManager, provider,
             providerName, modelName, config, timerScheduler, projectRoot, contextManager,
             fileInstructions, memoryIndexSupplier, null);
+    }
+
+    public NetworkOrchestrator(DeltaBuffer deltaBuffer,
+                               BlockingQueue<RenderEvent> renderQueue,
+                               BlockingQueue<InputEvent> inputQueue,
+                               SessionManager sessionManager, LlmProvider provider,
+                               String providerName, String modelName, LlmConfig config,
+                               ScheduledExecutorService timerScheduler,
+                               Path projectRoot,
+                               ContextManager contextManager,
+                               String fileInstructions,
+                               MemoryService memoryService) {
+        this(deltaBuffer, renderQueue, inputQueue, sessionManager, provider,
+            providerName, modelName, config, timerScheduler, projectRoot, contextManager,
+            fileInstructions, memoryService, null);
     }
 
     public NetworkOrchestrator(DeltaBuffer deltaBuffer,
@@ -149,6 +169,54 @@ public class NetworkOrchestrator {
         this.contextManager.setEventSink(this::onContextEvent);
         this.fileInstructions = fileInstructions != null ? fileInstructions : "";
         this.memoryIndexSupplier = memoryIndexSupplier != null ? memoryIndexSupplier : () -> "";
+        this.memoryService = null;
+    }
+
+    public NetworkOrchestrator(DeltaBuffer deltaBuffer,
+                               BlockingQueue<RenderEvent> renderQueue,
+                               BlockingQueue<InputEvent> inputQueue,
+                               SessionManager sessionManager, LlmProvider provider,
+                               String providerName, String modelName, LlmConfig config,
+                               ScheduledExecutorService timerScheduler,
+                               Path projectRoot,
+                               ContextManager contextManager,
+                               String fileInstructions,
+                               MemoryService memoryService,
+                               SessionHandle handle) {
+        this.deltaBuffer = deltaBuffer;
+        this.renderQueue = renderQueue;
+        this.inputQueue = inputQueue;
+        this.sessionManager = sessionManager;
+        this.provider = provider;
+        this.modelName = modelName;
+        this.config = config;
+        this.options = config.options();
+        this.timerScheduler = timerScheduler;
+        this.projectRoot = projectRoot;
+        this.handle = handle;
+
+        PermissionConfig permConfig = PermissionConfigLoader.load(
+            projectRoot,
+            Path.of(System.getProperty("user.home")).resolve(".lavendercode"));
+        this.modeManager = new PermissionModeManager(permConfig.defaultMode());
+        this.hitlCoordinator = new HitlCoordinator(renderQueue);
+        AtomicReference<RuleEngineLayer> ruleRef = new AtomicReference<>();
+        Consumer<List<PermissionRule>> reloadLocal = rules ->
+            ruleRef.set(RuleEngineLayer.fromTiers(rules, permConfig.projectRules(), permConfig.userRules()));
+        this.permissionPipeline = PermissionPipeline.create(
+            permConfig, modeManager::getMode, hitlCoordinator, projectRoot, reloadLocal);
+        this.batchExecutor = new BatchingToolExecutor(
+            options.fileOperationTimeoutSeconds(),
+            options.commandTimeoutSeconds(),
+            permissionPipeline,
+            projectRoot);
+        this.contextManager = contextManager != null ? contextManager : com.lavendercode.core.context.NoOpContextManager.INSTANCE;
+        this.contextManager.setEventSink(this::onContextEvent);
+        this.fileInstructions = fileInstructions != null ? fileInstructions : "";
+        this.memoryService = memoryService != null
+            ? memoryService
+            : new MemoryService(projectRoot, Path.of(System.getProperty("user.home")));
+        this.memoryIndexSupplier = this.memoryService::currentIndex;
     }
 
     private void onContextEvent(ContextEvent event) {
@@ -217,9 +285,10 @@ public class NetworkOrchestrator {
         tokenAccumulator.reset();
         deltaBuffer.forceFlush();
         safePut(new RenderEvent.AddUserMessage(msg.text()));
+        lastUserMessage = msg.text();
 
         String stablePrompt = SystemPromptAssembler.assemble(
-            options.systemPrompt(), fileInstructions, memoryIndexSupplier.get());
+            options.systemPrompt(), fileInstructions, currentMemoryIndex());
         String envInfo = EnvironmentInfoCollector.collect(modelName, APP_VERSION);
         List<ToolDefinition> toolDefs = ToolDescriptionEnhancer.enhance(
             modeManager.getToolDefinitions(options.toolSystemEnabled()));
@@ -286,6 +355,10 @@ public class NetworkOrchestrator {
             case AgentEvent.Complete c -> {
                 deltaBuffer.forceFlush();
                 stopTimer();
+                turnCount++;
+                if (memoryService != null) {
+                    memoryService.maybeUpdateAsync(provider, config, sessionManager.getHistory(), turnCount, lastUserMessage);
+                }
                 long seconds = currentTimer != null ? currentTimer.elapsedSeconds() : 0;
                 int finalTokens = tokenAccumulator.getTotalInput() + tokenAccumulator.getTotalOutput();
                 safePut(new RenderEvent.StatusUpdate(
@@ -305,6 +378,10 @@ public class NetworkOrchestrator {
                 safePut(new RenderEvent.FinalizeMessage());
             }
         }
+    }
+
+    private String currentMemoryIndex() {
+        return memoryService != null ? memoryService.currentIndex() : memoryIndexSupplier.get();
     }
 
     private void handleResumeSession(String sessionId) {
