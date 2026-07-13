@@ -2,6 +2,7 @@ package com.lavendercode;
 
 import com.lavendercode.chat.session.InMemorySessionManager;
 import com.lavendercode.chat.session.PersistingSessionManager;
+import com.lavendercode.chat.session.SessionCleanup;
 import com.lavendercode.chat.session.SessionManager;
 import com.lavendercode.chat.session.SessionTranscriptWriter;
 import com.lavendercode.chat.terminal.ProviderSelector;
@@ -79,6 +80,7 @@ public class LavenderCode {
         }
 
         Path projectRoot = Path.of("").toAbsolutePath().normalize();
+        SessionCleanup.startBackground(projectRoot.resolve(".lavendercode/sessions"));
         String instructions = InstructionLoader.load(projectRoot);
         McpSessionManager mcpSessions = new McpSessionManager();
         McpShutdownHook.register(mcpSessions);
