@@ -6,7 +6,11 @@ import com.lavendercode.core.tool.ToolCall;
 import com.lavendercode.core.tool.ToolResult;
 
 import java.io.IOException;
+import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.UUID;
 
 public class PersistingSessionManager implements SessionManager {
     private final SessionManager inner;
@@ -14,11 +18,20 @@ public class PersistingSessionManager implements SessionManager {
     private SessionTranscriptWriter writer;
     private boolean persist = true;
     private boolean firstMessage = true;
+    private Path projectRoot;
+    private String currentSessionId;
 
-    public PersistingSessionManager(SessionManager inner, SessionTranscriptWriter writer, String modelName) {
+    public PersistingSessionManager(SessionManager inner, SessionTranscriptWriter writer,
+                                    String modelName, Path projectRoot, String sessionId) {
         this.inner = inner;
         this.writer = writer;
         this.modelName = modelName;
+        this.projectRoot = projectRoot;
+        this.currentSessionId = sessionId;
+    }
+
+    public PersistingSessionManager(SessionManager inner, SessionTranscriptWriter writer, String modelName) {
+        this(inner, writer, modelName, null, null);
     }
 
     public void suspendPersistence() {
@@ -33,6 +46,30 @@ public class PersistingSessionManager implements SessionManager {
         writer.close();
         writer = next;
         firstMessage = false;
+    }
+
+    public void startNewSession(Path projectRoot) throws IOException {
+        this.projectRoot = projectRoot;
+        this.currentSessionId = generateSessionId();
+        var paths = new com.lavendercode.core.context.SessionPaths(projectRoot, currentSessionId);
+        paths.ensureDirectories();
+        swapWriter(SessionTranscriptWriter.open(paths.conversationJsonl()));
+        firstMessage = true;
+    }
+
+    public String currentSessionId() {
+        return currentSessionId;
+    }
+
+    public void close() throws IOException {
+        writer.close();
+    }
+
+    private static String generateSessionId() {
+        var now = LocalDateTime.now();
+        String timestamp = now.format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
+        String random = UUID.randomUUID().toString().substring(0, 8);
+        return timestamp + "-" + random;
     }
 
     @Override
