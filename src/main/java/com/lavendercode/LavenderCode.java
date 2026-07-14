@@ -102,6 +102,12 @@ public class LavenderCode {
                 new com.lavendercode.core.skill.SkillCatalog();
             skillCatalog.loadCatalog(projectRoot);
 
+            // 注册 InstallSkillTool，共享 skillCatalog 实例
+            if (opts.toolSystemEnabled()) {
+                ToolRegistry.register(new com.lavendercode.core.skill.InstallSkillTool(
+                    skillCatalog, projectRoot.resolve(".lavendercode/skills"), () -> {}));
+            }
+
             TerminalChatApplication app = new TerminalChatApplication(
                 sessionManager, provider,
                 providerName, selectedProvider.model(), config,
