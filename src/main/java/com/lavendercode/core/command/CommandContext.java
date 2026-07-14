@@ -22,4 +22,5 @@ public interface CommandContext {
     void openSessionList();
     void shutdown();
     void injectUserMessage(String text);
+    String hookRules();
 }

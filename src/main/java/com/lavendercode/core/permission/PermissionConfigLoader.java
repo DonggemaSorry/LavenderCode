@@ -68,7 +68,11 @@ public final class PermissionConfigLoader {
                 Iterator<Map.Entry<String, JsonNode>> fields = entry.fields();
                 while (fields.hasNext()) {
                     Map.Entry<String, JsonNode> field = fields.next();
-                    rules.add(parseRuleEntry(field.getKey(), field.getValue().asText()));
+                    try {
+                        rules.add(parseRuleEntry(field.getKey(), field.getValue().asText()));
+                    } catch (Exception e) {
+                        System.err.println("rule \"" + field.getKey() + "\" parse failed: " + e.getMessage());
+                    }
                 }
             }
         }

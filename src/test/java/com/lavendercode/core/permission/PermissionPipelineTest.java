@@ -69,6 +69,6 @@ class PermissionPipelineTest {
         assertThat(outcome.allowed()).isTrue();
         assertThat(reloaded.get()).isNotNull();
         assertThat(reloaded.get()).anyMatch(r ->
-            r.toolName().equals("Write") && r.pattern().equals("src/Foo.java"));
+            r.toolName().equals("Write") && r.patternMatcher().type() instanceof MatchType.Glob g && g.value().equals("src/Foo.java"));
     }
 }

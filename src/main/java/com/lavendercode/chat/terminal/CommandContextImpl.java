@@ -2,6 +2,9 @@ package com.lavendercode.chat.terminal;
 
 import com.lavendercode.chat.session.PersistingSessionManager;
 import com.lavendercode.core.command.CommandContext;
+import com.lavendercode.core.hook.HookEngine;
+import com.lavendercode.core.hook.HookEvent;
+import com.lavendercode.core.hook.HookPayload;
 import org.jline.terminal.Terminal;
 
 import java.io.IOException;
@@ -49,6 +52,18 @@ final class CommandContextImpl implements CommandContext {
 
     @Override
     public void clearAndNewSession() {
+        // Emit SessionEnd + clearOnce before clearing
+        HookEngine he = orch.hookEngine();
+        if (he != null) {
+            var payload = HookPayload.builder(HookEvent.SessionEnd)
+                .sessionId(orch.handle != null ? orch.handle.sessionId() : "")
+                .cwd(orch.projectRoot)
+                .mode(orch.modeManager.getMode().label())
+                .build();
+            he.dispatch(HookEvent.SessionEnd, payload, new java.util.concurrent.atomic.AtomicBoolean(false));
+            he.clearOnce();
+        }
+
         orch.deltaBuffer.forceFlush();
         if (orch.sessionManager instanceof PersistingSessionManager persisting && orch.projectRoot != null) {
             persisting.suspendPersistence();
@@ -102,4 +117,24 @@ final class CommandContextImpl implements CommandContext {
 
     @Override public void shutdown() { orch.handleShutdown(); }
     @Override public void injectUserMessage(String text) { orch.handleSendMessage(new InputEvent.SendMessage(text)); }
+
+    @Override
+    public String hookRules() {
+        HookEngine engine = orch.hookEngine();
+        if (engine == null || engine.config().rules().isEmpty()) return "No hooks loaded.";
+        var config = engine.config();
+        var sb = new StringBuilder();
+        for (var rule : config.rules()) {
+            sb.append("  ").append(rule.name())
+              .append("  ").append(rule.event())
+              .append("  ").append(rule.action().getClass().getSimpleName().toLowerCase());
+            var flags = new java.util.ArrayList<String>();
+            if (rule.onlyOnce()) flags.add("[once]");
+            if (rule.async()) flags.add("[async]");
+            if (!flags.isEmpty()) sb.append("  ").append(String.join(" ", flags));
+            sb.append('\n');
+        }
+        sb.append("Loaded from: ").append(String.join(", ", config.sources()));
+        return sb.toString().stripTrailing();
+    }
 }

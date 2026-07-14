@@ -53,10 +53,18 @@ public final class RuleEngineLayer implements PermissionLayer {
     private PermissionDecision toDecision(PermissionRule rule) {
         return switch (rule.effect()) {
             case ALLOW -> new PermissionDecision.Allow();
-            case DENY -> new PermissionDecision.Deny(
-                "RULE",
-                "规则拒绝: " + rule.toolName() + "(" + rule.pattern() + ")",
-                "调整 permissions.yaml 或请求用户授权");
+            case DENY -> {
+                String patternStr = switch (rule.patternMatcher().type()) {
+                    case MatchType.Glob g -> g.value();
+                    case MatchType.Exact e -> "=" + e.value();
+                    case MatchType.Regex r -> "~" + r.value();
+                    case MatchType.Not n -> "!" + n.inner();
+                };
+                yield new PermissionDecision.Deny(
+                    "RULE",
+                    "规则拒绝: " + rule.toolName() + "(" + patternStr + ")",
+                    "调整 permissions.yaml 或请求用户授权");
+            }
         };
     }
 }

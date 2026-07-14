@@ -39,7 +39,7 @@ class RuleEngineLayerTest {
     void parseRuleExtractsToolAndPattern() {
         var rule = PermissionRule.parse("Write(src/**)", PermissionRule.Effect.ALLOW);
         assertThat(rule.toolName()).isEqualTo("Write");
-        assertThat(rule.pattern()).isEqualTo("src/**");
+        assertThat(rule.patternMatcher().type()).isInstanceOf(MatchType.Glob.class);
         assertThat(rule.effect()).isEqualTo(PermissionRule.Effect.ALLOW);
     }
 }

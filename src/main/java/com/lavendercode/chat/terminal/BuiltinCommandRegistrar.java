@@ -25,6 +25,7 @@ public final class BuiltinCommandRegistrar {
             def("do",      List.of(),       "退出计划模式并开始执行",    CommandKind.PROMPT, (ctx, args) -> { ctx.exitPlanToDefault(); ctx.injectUserMessage("请根据以上计划开始执行"); return null; }),
             def("exit",    List.of("quit"), "退出 LavenderCode",        CommandKind.UI,     (ctx, args) -> { ctx.shutdown(); return null; }),
             def("help",    List.of(),       "显示可用命令列表",         CommandKind.LOCAL,  (ctx, args) -> { ctx.printMessage(formatHelp()); return null; }),
+            def("hooks",   List.of(),       "显示已加载的 Hook 规则列表", CommandKind.LOCAL,  (ctx, args) -> { ctx.printMessage(ctx.hookRules()); return null; }),
             def("memory",  List.of(),       "显示已加载的记忆文件列表",  CommandKind.LOCAL,  (ctx, args) -> { ctx.printMessage(formatMemory(ctx)); return null; }),
             def("permission", List.of(),    "显示当前权限模式",         CommandKind.LOCAL,  (ctx, args) -> { ctx.printMessage(ctx.currentModeLabel()); return null; }),
             def("plan",    List.of(),       "进入计划模式（仅只读工具）", CommandKind.UI,     (ctx, args) -> { ctx.enterPlanMode(); return null; }),

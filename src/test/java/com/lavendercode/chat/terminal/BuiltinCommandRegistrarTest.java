@@ -8,9 +8,9 @@ import static org.assertj.core.api.Assertions.*;
 class BuiltinCommandRegistrarTest {
 
     @Test
-    void returnsTwelveCommandDefinitions() {
+    void returnsThirteenCommandDefinitions() {
         var defs = BuiltinCommandRegistrar.builtinCommands();
-        assertThat(defs).hasSize(12);
+        assertThat(defs).hasSize(13);
     }
 
     @Test
@@ -18,7 +18,7 @@ class BuiltinCommandRegistrarTest {
         var defs = BuiltinCommandRegistrar.builtinCommands();
         var names = defs.stream().map(d -> d.metadata().name()).toList();
         assertThat(names).containsExactlyInAnyOrder(
-            "clear", "compact", "do", "exit", "help", "memory",
+            "clear", "compact", "do", "exit", "help", "hooks", "memory",
             "permission", "plan", "resume", "review", "session", "status"
         );
     }
@@ -56,7 +56,7 @@ class BuiltinCommandRegistrarTest {
             .map(d -> d.metadata().name())
             .toList();
         assertThat(localNames).containsExactlyInAnyOrder(
-            "help", "memory", "permission", "session", "status"
+            "help", "hooks", "memory", "permission", "session", "status"
         );
     }
 
@@ -86,7 +86,7 @@ class BuiltinCommandRegistrarTest {
     void canConstructRegistryWithoutConflict() {
         var defs = BuiltinCommandRegistrar.builtinCommands();
         var registry = new CommandRegistry(defs);
-        assertThat(registry.visibleCommands()).hasSize(12);
+        assertThat(registry.visibleCommands()).hasSize(13);
     }
 
     @Test

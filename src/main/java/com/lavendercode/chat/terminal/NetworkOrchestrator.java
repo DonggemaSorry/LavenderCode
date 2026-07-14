@@ -14,6 +14,12 @@ import com.lavendercode.core.context.ContextWindowDefaults;
 import com.lavendercode.core.context.ContextManager;
 import com.lavendercode.core.context.SessionHandle;
 import com.lavendercode.core.context.TokenEstimator;
+import com.lavendercode.core.hook.HookConfig;
+import com.lavendercode.core.hook.HookConfigLoader;
+import com.lavendercode.core.hook.HookEngine;
+import com.lavendercode.core.hook.HookEngineImpl;
+import com.lavendercode.core.hook.HookEvent;
+import com.lavendercode.core.hook.HookPayload;
 import com.lavendercode.core.memory.MemoryService;
 import com.lavendercode.core.permission.*;
 import com.lavendercode.core.provider.Message;
@@ -27,6 +33,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
@@ -63,6 +70,9 @@ public class NetworkOrchestrator {
     private final Supplier<String> memoryIndexSupplier;
     final MemoryService memoryService;
     private final ReentrantLock sessionLock = new ReentrantLock();
+    private HookEngineImpl hookEngine;
+
+    public HookEngine hookEngine() { return hookEngine; }
 
     volatile ReActLoop currentLoop;
     private volatile Thread loopThread;
@@ -173,6 +183,7 @@ public class NetworkOrchestrator {
         this.fileInstructions = fileInstructions != null ? fileInstructions : "";
         this.memoryIndexSupplier = memoryIndexSupplier != null ? memoryIndexSupplier : () -> "";
         this.memoryService = null;
+        initHookEngine();
     }
 
     public NetworkOrchestrator(DeltaBuffer deltaBuffer,
@@ -220,15 +231,46 @@ public class NetworkOrchestrator {
             ? memoryService
             : new MemoryService(projectRoot, Path.of(System.getProperty("user.home")));
         this.memoryIndexSupplier = this.memoryService::currentIndex;
+        initHookEngine();
+    }
+
+    private void initHookEngine() {
+        HookConfig hookConfig = new HookConfigLoader().load(projectRoot);
+        this.hookEngine = new HookEngineImpl(hookConfig);
+    }
+
+    private void dispatchHook(HookEvent event, HookPayload payload) {
+        if (hookEngine != null) {
+            hookEngine.dispatch(event, payload, new AtomicBoolean(false));
+        }
+    }
+
+    private HookPayload sessionPayload(HookEvent event) {
+        return HookPayload.builder(event)
+            .sessionId(handle != null ? handle.sessionId() : "")
+            .cwd(projectRoot)
+            .mode(modeManager.getMode().label())
+            .build();
     }
 
     private void onContextEvent(ContextEvent event) {
         switch (event) {
-            case ContextEvent.Compacting c ->
+            case ContextEvent.Compacting c -> {
+                dispatchHook(HookEvent.PreCompact, sessionPayload(HookEvent.PreCompact));
                 safePut(new RenderEvent.AddSystemMessage("[" + c.message() + "]"));
-            case ContextEvent.Compacted c ->
+            }
+            case ContextEvent.Compacted c -> {
                 safePut(new RenderEvent.AddSystemMessage(
                     "[已压缩,token 从 " + c.tokensBefore() + " 降至 " + c.tokensAfter() + "]"));
+                var payload = HookPayload.builder(HookEvent.PostCompact)
+                    .sessionId(handle != null ? handle.sessionId() : "")
+                    .cwd(projectRoot)
+                    .mode(modeManager.getMode().label())
+                    .put("tokens_before", c.tokensBefore())
+                    .put("tokens_after", c.tokensAfter())
+                    .build();
+                dispatchHook(HookEvent.PostCompact, payload);
+            }
             case ContextEvent.CompactFailed f ->
                 safePut(new RenderEvent.AddSystemMessage("[压缩失败: " + f.reason() + "]"));
         }
@@ -248,6 +290,7 @@ public class NetworkOrchestrator {
 
     public void run() {
         safePut(new RenderEvent.StatusUpdate(modeManager.getMode().label(), modelName, "", 0));
+        dispatchHook(HookEvent.SessionStart, sessionPayload(HookEvent.SessionStart));
         try {
             while (true) {
                 InputEvent event = inputQueue.poll(100, TimeUnit.MILLISECONDS);
@@ -315,6 +358,7 @@ public class NetworkOrchestrator {
 
         var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3, contextManager);
         loop.setConfig(config, toolDefs, stablePrompt, envInfo, modeManager);
+        if (hookEngine != null) loop.setHookEngine(hookEngine);
         currentLoop = loop;
 
         startTimer();
@@ -440,12 +484,17 @@ public class NetworkOrchestrator {
                 sessionManager.replaceHistory(result.messages());
             }
 
+            if (hookEngine != null) {
+                dispatchHook(HookEvent.SessionEnd, sessionPayload(HookEvent.SessionEnd));
+                hookEngine.clearOnce();
+            }
             boolean compacted = result.compacted()
                 || SessionRestorer.maybeCompact(sessionManager, contextManager, contextWindow(), new TokenEstimator());
             int count = sessionManager.getMessageCount();
             safePut(new RenderEvent.AddSystemMessage(
                 "[已恢复会话 " + sessionId + "，共 " + count + " 条消息" + (compacted ? "，已压缩上下文" : "") + "]"));
             safePut(new RenderEvent.FinalizeMessage());
+            dispatchHook(HookEvent.SessionResume, sessionPayload(HookEvent.SessionResume));
         } catch (IOException e) {
             safePut(new RenderEvent.AddSystemMessage("[恢复会话失败: " + e.getMessage() + "]"));
             safePut(new RenderEvent.FinalizeMessage());
@@ -537,6 +586,7 @@ public class NetworkOrchestrator {
     }
 
     void handleShutdown() {
+        dispatchHook(HookEvent.SessionEnd, sessionPayload(HookEvent.SessionEnd));
         if (currentLoop != null) {
             currentLoop.cancel();
         }
