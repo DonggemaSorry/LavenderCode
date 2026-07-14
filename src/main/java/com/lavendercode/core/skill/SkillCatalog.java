@@ -188,4 +188,36 @@ public final class SkillCatalog {
         node.forEach(item -> list.add(item.asText()));
         return List.copyOf(list);
     }
+
+    // --- loadFromYamlAndPrompt ---
+
+    static Skill loadFromYamlAndPrompt(Path dir) {
+        Path yaml = dir.resolve("skill.yaml");
+        Path prompt = dir.resolve("prompt.md");
+        if (!Files.exists(yaml) || !Files.exists(prompt)) return null;
+        try {
+            JsonNode node = YAML.readTree(yaml.toFile());
+            String name = text(node, "name");
+            String description = text(node, "description");
+            String whenToUse = text(node, "whenToUse");
+            List<String> tags = readStringList(node.get("tags"));
+            List<String> allowedTools = node.has("allowedTools")
+                ? readStringList(node.get("allowedTools")) : null;
+            String mode = text(node, "mode");
+            if (mode == null) {
+                mode = text(node, "context");
+            }
+            String model = text(node, "model");
+            String forkContext = text(node, "forkContext");
+            String dirName = dir.getFileName().toString();
+            var meta = SkillMeta.withDefaults(
+                name != null ? name : dirName,
+                description, whenToUse, tags, allowedTools, mode, model, forkContext);
+            // phase-1: 不读 body
+            return new Skill(meta, null, dir, false);
+        } catch (IOException e) {
+            System.err.println("WARN: skill.yaml 解析失败: " + yaml + " — " + e.getMessage());
+            return null;
+        }
+    }
 }
