@@ -1,5 +1,6 @@
 package com.lavendercode.core.prompt;
 
+import com.lavendercode.core.hook.HookReminderQueue;
 import java.util.Optional;
 
 public class ReminderInjector {
@@ -18,9 +19,23 @@ public class ReminderInjector {
         "<system-reminder>Plan mode: read-only tools only. Produce an actionable plan.</system-reminder>";
 
     public static Optional<String> inject(int round, boolean planMode) {
-        if (!planMode) return Optional.empty();
-        boolean firstRound = (round == 1);
-        boolean repeatRound = (round % REPEAT_INTERVAL == 0);
-        return Optional.of(firstRound || repeatRound ? PLAN_FULL : PLAN_BRIEF);
+        return inject(round, planMode, null);
+    }
+
+    public static Optional<String> inject(int round, boolean planMode, HookReminderQueue hookQueue) {
+        StringBuilder sb = new StringBuilder();
+        if (planMode) {
+            boolean firstRound = (round == 1);
+            boolean repeatRound = (round % REPEAT_INTERVAL == 0);
+            sb.append(firstRound || repeatRound ? PLAN_FULL : PLAN_BRIEF);
+        }
+        if (hookQueue != null) {
+            var reminders = hookQueue.drain();
+            for (String r : reminders) {
+                if (!sb.isEmpty()) sb.append('\n');
+                sb.append("<system-reminder>").append(r).append("</system-reminder>");
+            }
+        }
+        return sb.isEmpty() ? Optional.empty() : Optional.of(sb.toString());
     }
 }
