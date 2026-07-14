@@ -51,4 +51,48 @@ public final class SkillCatalog {
     private final java.util.Map<String, Path> sources = new java.util.LinkedHashMap<>();
 
     public SkillCatalog() {}
+
+    public void register(Skill skill) {
+        String name = skill.meta().name();
+        skills.put(name, skill);
+        if (skill.sourceDir() != null) {
+            sources.put(name, skill.sourceDir());
+        }
+    }
+
+    public Skill get(String name) {
+        return skills.get(name);
+    }
+
+    public List<SkillMeta> list() {
+        return skills.values().stream()
+            .map(Skill::meta)
+            .toList();
+    }
+
+    public Path source(String name) {
+        return sources.get(name);
+    }
+
+    public void reload() {
+        skills.clear();
+        sources.clear();
+    }
+
+    public String buildActiveContext() {
+        if (skills.isEmpty()) return "";
+        var sb = new StringBuilder();
+        for (Skill skill : skills.values()) {
+            SkillMeta m = skill.meta();
+            sb.append("- ").append(m.name());
+            if (m.description() != null) {
+                sb.append(": ").append(m.description());
+            }
+            if (m.whenToUse() != null) {
+                sb.append(" (").append(m.whenToUse()).append(")");
+            }
+            sb.append('\n');
+        }
+        return sb.toString().stripTrailing();
+    }
 }
