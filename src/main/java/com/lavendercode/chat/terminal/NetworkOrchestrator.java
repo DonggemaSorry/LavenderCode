@@ -345,6 +345,24 @@ public class NetworkOrchestrator {
             return;
         }
 
+        // UserPromptSubmit hook intercept
+        if (hookEngine != null) {
+            var payload = HookPayload.builder(HookEvent.UserPromptSubmit)
+                .sessionId(handle != null ? handle.sessionId() : "")
+                .cwd(projectRoot)
+                .mode(modeManager.getMode().label())
+                .put("prompt", msg.text())
+                .build();
+            var intercept = hookEngine.dispatch(HookEvent.UserPromptSubmit, payload, new AtomicBoolean(false));
+            if (intercept.blocked()) {
+                deltaBuffer.forceFlush();
+                safePut(new RenderEvent.AddSystemMessage(
+                    "[hook " + intercept.hookName() + "] " + intercept.reason()));
+                safePut(new RenderEvent.FinalizeMessage());
+                return;
+            }
+        }
+
         tokenAccumulator.reset();
         deltaBuffer.forceFlush();
         safePut(new RenderEvent.AddUserMessage(msg.text()));
