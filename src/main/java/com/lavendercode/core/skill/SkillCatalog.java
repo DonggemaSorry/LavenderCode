@@ -258,4 +258,51 @@ public final class SkillCatalog {
     public void loadCatalog(Path workDir) {
         loadCatalog(workDir, Path.of(System.getProperty("user.home")));
     }
+
+    // --- getFull ---
+
+    public Skill getFull(String name) {
+        Skill cached = skills.get(name);
+        if (cached == null) return null;
+        if (cached.sourceDir() == null) return cached;
+        if (cached.bodyLoaded()) return cached;
+        try {
+            String body = readBody(cached.sourceDir());
+            Skill updated = cached.withBody(body);
+            skills.put(name, updated);
+            return updated;
+        } catch (IOException e) {
+            System.err.println("WARN: getFull 读取 body 失败，保留旧缓存: " + e.getMessage());
+            return cached;
+        }
+    }
+
+    private static String readBody(Path sourceDir) throws IOException {
+        Path promptMd = sourceDir.resolve("prompt.md");
+        if (Files.exists(promptMd)) {
+            return Files.readString(promptMd);
+        }
+        Path skillMd = sourceDir.resolve("SKILL.md");
+        if (Files.exists(skillMd)) {
+            String content = Files.readString(skillMd);
+            return extractBodyFromSkillMd(content);
+        }
+        throw new IOException("找不到 prompt.md 或 SKILL.md: " + sourceDir);
+    }
+
+    private static String extractBodyFromSkillMd(String content) {
+        if (content.startsWith("---\n") || content.startsWith("---\r\n")) {
+            int end = content.indexOf("\n---", 4);
+            if (end > 0) {
+                int bodyStart = end + 4;
+                while (bodyStart < content.length()
+                       && (content.charAt(bodyStart) == '\n'
+                           || content.charAt(bodyStart) == '\r')) {
+                    bodyStart++;
+                }
+                return content.substring(bodyStart);
+            }
+        }
+        return content;
+    }
 }
