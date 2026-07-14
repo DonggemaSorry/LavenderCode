@@ -245,4 +245,17 @@ public final class SkillCatalog {
             System.err.println("WARN: 读取技能目录失败: " + dir + " — " + e.getMessage());
         }
     }
+
+    // --- loadCatalog ---
+
+    public void loadCatalog(Path workDir, Path userHome) {
+        // tier 1: user home (~/.lavendercode/skills/)
+        loadFromDirectory(userHome.resolve(".lavendercode").resolve("skills"));
+        // tier 2: project (.lavendercode/skills/) — 同名覆盖 tier 1
+        loadFromDirectory(workDir.resolve(".lavendercode").resolve("skills"));
+    }
+
+    public void loadCatalog(Path workDir) {
+        loadCatalog(workDir, Path.of(System.getProperty("user.home")));
+    }
 }

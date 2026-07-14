@@ -158,7 +158,71 @@ class SkillCatalogTest {
         assertThat(skill.bodyLoaded()).isFalse();
     }
 
-    // --- loadCatalog tests (added in Task 6) ---
+    // --- loadCatalog tests ---
+
+    @Test
+    void loadCatalogTwoTiersProjectOverridesUserHome() throws java.io.IOException {
+        Path userSkills = tempDir.resolve("user").resolve(".lavendercode").resolve("skills");
+        Path projectSkills = tempDir.resolve("project").resolve(".lavendercode").resolve("skills");
+
+        Path userSkill = userSkills.resolve("commit");
+        java.nio.file.Files.createDirectories(userSkill);
+        java.nio.file.Files.writeString(userSkill.resolve("SKILL.md"),
+            "---\nname: commit\ndescription: user version\n---\nuser body");
+
+        Path projectSkill = projectSkills.resolve("commit");
+        java.nio.file.Files.createDirectories(projectSkill);
+        java.nio.file.Files.writeString(projectSkill.resolve("SKILL.md"),
+            "---\nname: commit\ndescription: project version\n---\nproject body");
+
+        var catalog = new SkillCatalog();
+        catalog.loadCatalog(tempDir.resolve("project"), tempDir.resolve("user"));
+        var skill = catalog.get("commit");
+        assertThat(skill).isNotNull();
+        assertThat(skill.meta().description()).isEqualTo("project version");
+        assertThat(skill.promptBody()).contains("project body");
+    }
+
+    @Test
+    void loadCatalogUserHomeOnlyWhenProjectMissing() throws java.io.IOException {
+        Path userSkills = tempDir.resolve("user").resolve(".lavendercode").resolve("skills");
+        Path userSkill = userSkills.resolve("review");
+        java.nio.file.Files.createDirectories(userSkill);
+        java.nio.file.Files.writeString(userSkill.resolve("SKILL.md"),
+            "---\nname: review\ndescription: user only\n---\nbody");
+
+        var catalog = new SkillCatalog();
+        catalog.loadCatalog(tempDir.resolve("project-no-skills"), tempDir.resolve("user"));
+        assertThat(catalog.get("review")).isNotNull();
+        assertThat(catalog.get("review").meta().description()).isEqualTo("user only");
+    }
+
+    @Test
+    void loadCatalogBothTiersLoadDisjoint() throws java.io.IOException {
+        Path userSkills = tempDir.resolve("user").resolve(".lavendercode").resolve("skills");
+        Path projectSkills = tempDir.resolve("project").resolve(".lavendercode").resolve("skills");
+
+        Path userSkill = userSkills.resolve("skill-a");
+        java.nio.file.Files.createDirectories(userSkill);
+        java.nio.file.Files.writeString(userSkill.resolve("SKILL.md"), "# skill-a\nbody a");
+
+        Path projectSkill = projectSkills.resolve("skill-b");
+        java.nio.file.Files.createDirectories(projectSkill);
+        java.nio.file.Files.writeString(projectSkill.resolve("SKILL.md"), "# skill-b\nbody b");
+
+        var catalog = new SkillCatalog();
+        catalog.loadCatalog(tempDir.resolve("project"), tempDir.resolve("user"));
+        assertThat(catalog.list()).hasSize(2);
+        assertThat(catalog.get("skill-a")).isNotNull();
+        assertThat(catalog.get("skill-b")).isNotNull();
+    }
+
+    @Test
+    void loadCatalogMissingUserHomeDoesNotThrow() {
+        var catalog = new SkillCatalog();
+        catalog.loadCatalog(tempDir.resolve("project"), tempDir.resolve("nonexistent"));
+        assertThat(catalog.list()).isEmpty();
+    }
 
     @TempDir
     Path tempDir;
