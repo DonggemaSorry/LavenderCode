@@ -99,4 +99,33 @@ class NetworkOrchestratorCommandTest {
         assertThat(event).isNotNull();
         assertThat(((RenderEvent.AddSystemMessage) event).text()).contains("Session ID:");
     }
+
+    @Test
+    void unknownCommandShowsHelpHint() throws Exception {
+        new Thread(orchestrator::run).start();
+        inputQueue.put(new InputEvent.ExecuteCommand("/foobar"));
+        RenderEvent event = pollUntil(RenderEvent.AddSystemMessage.class);
+        assertThat(event).isNotNull();
+        assertThat(((RenderEvent.AddSystemMessage) event).text()).contains("未知命令");
+        assertThat(((RenderEvent.AddSystemMessage) event).text()).contains("/help");
+    }
+
+    @Test
+    void helpCommandOutputsCommandList() throws Exception {
+        new Thread(orchestrator::run).start();
+        inputQueue.put(new InputEvent.ExecuteCommand("/help"));
+        RenderEvent event = pollUntil(RenderEvent.AddSystemMessage.class);
+        assertThat(event).isNotNull();
+        assertThat(((RenderEvent.AddSystemMessage) event).text()).contains("/exit");
+        assertThat(((RenderEvent.AddSystemMessage) event).text()).contains("/status");
+    }
+
+    @Test
+    void caseInsensitiveCommandMatch() throws Exception {
+        new Thread(orchestrator::run).start();
+        inputQueue.put(new InputEvent.ExecuteCommand("/Help"));
+        RenderEvent event = pollUntil(RenderEvent.AddSystemMessage.class);
+        assertThat(event).isNotNull();
+        assertThat(((RenderEvent.AddSystemMessage) event).text()).contains("/exit");
+    }
 }

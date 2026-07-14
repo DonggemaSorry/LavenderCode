@@ -54,6 +54,11 @@ class NetworkOrchestratorCompactTest {
             sessionManager, provider, "test-provider", "gpt-4", config,
             scheduler, projectRoot, contextManager
         );
+        var defs = BuiltinCommandRegistrar.builtinCommands();
+        var registry = new com.lavendercode.core.command.CommandRegistry(defs);
+        BuiltinCommandRegistrar.bindRegistry(registry);
+        var ctx = new CommandContextImpl(orchestrator, null, null);
+        orchestrator.bindCommandSystem(registry, ctx);
     }
 
     @AfterEach
@@ -78,7 +83,7 @@ class NetworkOrchestratorCompactTest {
     void compactCommandInvokesManualCompaction() throws Exception {
         new Thread(orchestrator::run).start();
 
-        inputQueue.put(new InputEvent.ExecuteCommand(InputEvent.CommandType.COMPACT, ""));
+        inputQueue.put(new InputEvent.ExecuteCommand("/compact"));
 
         RenderEvent event = pollUntil(RenderEvent.AddSystemMessage.class);
         assertThat(event).isNotNull();

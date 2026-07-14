@@ -198,6 +198,11 @@ public class TerminalChatApplication {
                 memoryIndexSupplier,
                 sessionHandle
             );
+        var defs = BuiltinCommandRegistrar.builtinCommands();
+        var registry = new com.lavendercode.core.command.CommandRegistry(defs);
+        BuiltinCommandRegistrar.bindRegistry(registry);
+        var cmdCtx = new CommandContextImpl(orchestrator, terminal, projectRoot.resolve(".lavendercode/sessions"));
+        orchestrator.bindCommandSystem(registry, cmdCtx);
         InputAreaLayout inputLayout = new InputAreaLayout();
         TerminalRenderer renderer = new TerminalRenderer(
             terminal, renderQueue, theme, providerName, modelName, inputLayout);

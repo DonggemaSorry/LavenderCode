@@ -259,7 +259,7 @@ public class NetworkOrchestrator {
                     case InputEvent.SendMessage msg -> handleSendMessage(msg);
                     case InputEvent.ResumeSession resume -> handleResumeSession(resume.sessionId());
                     case InputEvent.ExecuteCommand cmd -> {
-                        if (handleCommand(cmd)) {
+                        if (handleCommand(cmd.rawInput())) {
                             return;
                         }
                     }
@@ -269,6 +269,17 @@ public class NetworkOrchestrator {
                         safePut(new RenderEvent.StatusUpdate(modeManager.getMode().label(), modelName, "", tokens));
                     }
                     case InputEvent.HitlChoice hc -> hitlCoordinator.complete(hc.choice());
+                    case InputEvent.CancelAgent __ -> {
+                        if (currentLoop != null) {
+                            currentLoop.cancel();
+                        }
+                    }
+                    case InputEvent.ScrollEvent se -> {
+                        RenderEvent scrollEvent = parseScrollEvent(se.command());
+                        if (scrollEvent != null) {
+                            safePut(scrollEvent);
+                        }
+                    }
                     case InputEvent.Shutdown __ -> {
                         handleShutdown();
                         return;
@@ -463,74 +474,6 @@ public class NetworkOrchestrator {
         }
         String protocol = provider != null ? provider.protocol() : "";
         return ContextWindowDefaults.resolve(protocol, null);
-    }
-
-    private boolean handleCommand(InputEvent.ExecuteCommand cmd) {
-        switch (cmd.type()) {
-            case CANCEL -> {
-                if (currentLoop != null) {
-                    currentLoop.cancel();
-                } else {
-                    safePut(new RenderEvent.AddSystemMessage("[No active request]"));
-                    safePut(new RenderEvent.FinalizeMessage());
-                }
-            }
-            case ESC_CANCEL -> {
-                if (currentLoop != null) {
-                    currentLoop.cancel();
-                }
-            }
-            case PLAN -> {
-                modeManager.enterPlanMode();
-                int tokens = tokenAccumulator.getTotalInput() + tokenAccumulator.getTotalOutput();
-                safePut(new RenderEvent.StatusUpdate(modeManager.getMode().label(), modelName, "", tokens));
-                safePut(new RenderEvent.AddSystemMessage(
-                    "[已进入计划模式 · 仅只读工具可用]"));
-            }
-            case DO -> {
-                modeManager.exitPlanToDefault();
-                int tokens = tokenAccumulator.getTotalInput() + tokenAccumulator.getTotalOutput();
-                safePut(new RenderEvent.StatusUpdate(modeManager.getMode().label(), modelName, "", tokens));
-                safePut(new RenderEvent.AddSystemMessage(
-                    "[已退出计划模式 · 所有工具可用]"));
-                handleSendMessage(new InputEvent.SendMessage("请根据以上计划开始执行"));
-            }
-            case CLEAR -> {
-                deltaBuffer.forceFlush();
-                sessionManager.clear();
-                safePut(new RenderEvent.ClearChat());
-            }
-            case EXIT, QUIT -> {
-                handleShutdown();
-                return true;
-            }
-            case HELP -> {
-                deltaBuffer.forceFlush();
-                safePut(new RenderEvent.AddSystemMessage(BuiltinCommandRegistry.helpText()));
-            }
-            case COMPACT -> handleCompact();
-            case RESUME -> {
-                // Fallback path when a RESUME command reaches the orchestrator instead of the picker.
-                String blocked = ResumeGate.check(isAgentRunning(), resuming);
-                if (blocked != null) {
-                    safePut(new RenderEvent.AddSystemMessage("[" + blocked + "]"));
-                    safePut(new RenderEvent.FinalizeMessage());
-                }
-            }
-            case UNKNOWN -> {
-                deltaBuffer.forceFlush();
-                safePut(new RenderEvent.AddSystemMessage("[" + cmd.args() + "]"));
-                safePut(new RenderEvent.FinalizeMessage());
-            }
-            case SCROLL -> {
-                deltaBuffer.forceFlush();
-                RenderEvent se = parseScrollEvent(cmd.args());
-                if (se != null) {
-                    safePut(se);
-                }
-            }
-        }
-        return false;
     }
 
     private boolean handleCommand(String rawInput) {

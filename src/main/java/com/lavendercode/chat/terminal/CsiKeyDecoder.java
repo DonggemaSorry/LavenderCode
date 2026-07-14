@@ -62,7 +62,7 @@ final class CsiKeyDecoder {
         }
     }
 
-    /** @return scroll command arg for {@link InputEvent.CommandType#SCROLL}, or {@code null} */
+    /** @return scroll command arg for {@link InputEvent.ScrollEvent}, or {@code null} */
     static String toScrollCommand(int key) {
         return switch (key) {
             case KEY_SCROLL_UP, KEY_WHEEL_UP -> "up";

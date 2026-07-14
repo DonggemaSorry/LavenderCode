@@ -4,7 +4,7 @@ public sealed interface InputEvent {
 
     record SendMessage(String text) implements InputEvent {}
 
-    record ExecuteCommand(CommandType type, String args) implements InputEvent {}
+    record ExecuteCommand(String rawInput) implements InputEvent {}
 
     record ResumeSession(String sessionId) implements InputEvent {}
 
@@ -14,7 +14,7 @@ public sealed interface InputEvent {
 
     record HitlChoice(com.lavendercode.core.permission.HitlChoice choice) implements InputEvent {}
 
-    enum CommandType {
-        EXIT, QUIT, CLEAR, HELP, CANCEL, SCROLL, ESC_CANCEL, PLAN, DO, COMPACT, RESUME, UNKNOWN
-    }
+    record CancelAgent() implements InputEvent {}
+
+    record ScrollEvent(String command) implements InputEvent {}
 }

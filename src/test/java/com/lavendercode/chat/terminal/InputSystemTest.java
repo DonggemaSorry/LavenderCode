@@ -1,23 +1,25 @@
 package com.lavendercode.chat.terminal;
 
 import org.junit.jupiter.api.Test;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 class InputSystemTest {
 
     @Test
-    void shouldStopAfterExitOrQuitCommands() {
-        assertThat(InputSystem.shouldStopAfter(
-            new InputEvent.ExecuteCommand(InputEvent.CommandType.EXIT, ""))).isTrue();
-        assertThat(InputSystem.shouldStopAfter(
-            new InputEvent.ExecuteCommand(InputEvent.CommandType.QUIT, ""))).isTrue();
+    void executeCommandRecordHoldsRawInput() {
+        var event = new InputEvent.ExecuteCommand("/exit");
+        assertThat(event.rawInput()).isEqualTo("/exit");
     }
 
     @Test
-    void shouldNotStopAfterOtherCommands() {
-        assertThat(InputSystem.shouldStopAfter(
-            new InputEvent.ExecuteCommand(InputEvent.CommandType.HELP, ""))).isFalse();
-        assertThat(InputSystem.shouldStopAfter(new InputEvent.SendMessage("hello"))).isFalse();
+    void cancelAgentRecordExists() {
+        var event = new InputEvent.CancelAgent();
+        assertThat(event).isInstanceOf(InputEvent.class);
+    }
+
+    @Test
+    void scrollEventRecordHoldsCommand() {
+        var event = new InputEvent.ScrollEvent("up");
+        assertThat(event.command()).isEqualTo("up");
     }
 }

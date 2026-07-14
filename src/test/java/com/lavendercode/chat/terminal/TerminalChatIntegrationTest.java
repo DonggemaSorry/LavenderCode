@@ -97,6 +97,11 @@ class TerminalChatIntegrationTest {
             sessionManager, provider, "test-provider", "gpt-4", config,
             scheduler, projectRoot
         );
+        var defs = BuiltinCommandRegistrar.builtinCommands();
+        var registry = new com.lavendercode.core.command.CommandRegistry(defs);
+        BuiltinCommandRegistrar.bindRegistry(registry);
+        var ctx = new CommandContextImpl(orchestrator, null, null);
+        orchestrator.bindCommandSystem(registry, ctx);
 
         networkThread = new Thread(orchestrator::run, "lavender-network-test");
         networkThread.start();
@@ -130,7 +135,7 @@ class TerminalChatIntegrationTest {
     void clearCommandShouldEmitClearChat() throws Exception {
         sessionManager.addUserMessage("msg1");
 
-        inputQueue.put(new InputEvent.ExecuteCommand(InputEvent.CommandType.CLEAR, ""));
+        inputQueue.put(new InputEvent.ExecuteCommand("/clear"));
 
         RenderEvent event = pollUntil(RenderEvent.ClearChat.class);
         assertThat(event).isNotNull();
@@ -142,7 +147,7 @@ class TerminalChatIntegrationTest {
 
     @Test
     void exitCommandShouldEmitShutdown() throws Exception {
-        inputQueue.put(new InputEvent.ExecuteCommand(InputEvent.CommandType.EXIT, ""));
+        inputQueue.put(new InputEvent.ExecuteCommand("/exit"));
 
         RenderEvent event = pollUntil(RenderEvent.Shutdown.class);
         assertThat(event).isNotNull();

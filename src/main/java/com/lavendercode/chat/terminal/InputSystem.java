@@ -1,14 +1,11 @@
 package com.lavendercode.chat.terminal;
 
-import com.lavendercode.chat.session.SessionCatalog;
-import com.lavendercode.chat.session.SessionListItem;
 import com.lavendercode.core.permission.HitlChoice;
 import org.jline.terminal.Attributes;
 import org.jline.terminal.Terminal;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -75,14 +72,7 @@ public class InputSystem {
                     continue;
                 }
                 if (line.startsWith("/")) {
-                    InputEvent event = parseCommand(line.trim());
-                    if (event != null) {
-                        inputQueue.offer(event);
-                    }
-                    if (shouldStopAfter(event)) {
-                        shutdown.set(true);
-                        break;
-                    }
+                    inputQueue.offer(new InputEvent.ExecuteCommand(line.trim()));
                 } else {
                     inputQueue.offer(new InputEvent.SendMessage(line));
                 }
@@ -100,11 +90,6 @@ public class InputSystem {
                 }
             }
         }
-    }
-
-    static boolean shouldStopAfter(InputEvent event) {
-        return event instanceof InputEvent.ExecuteCommand cmd
-            && (cmd.type() == InputEvent.CommandType.EXIT || cmd.type() == InputEvent.CommandType.QUIT);
     }
 
     private String readEditedLine() throws IOException {
@@ -126,7 +111,7 @@ public class InputSystem {
                     inputQueue.offer(new InputEvent.CyclePermissionMode());
                 }
                 case TerminalInput.Scroll(var cmd) -> {
-                    inputQueue.offer(new InputEvent.ExecuteCommand(InputEvent.CommandType.SCROLL, cmd));
+                    inputQueue.offer(new InputEvent.ScrollEvent(cmd));
                 }
                 case TerminalInput.Submit() -> {
                     publishDraftSync("", 0);
@@ -154,9 +139,9 @@ public class InputSystem {
                 case TerminalInput.Escape() -> {
                     if (hitlCoordinator != null && hitlCoordinator.isAwaiting()) {
                         inputQueue.offer(new InputEvent.HitlChoice(HitlChoice.DENY));
-                        inputQueue.offer(new InputEvent.ExecuteCommand(InputEvent.CommandType.ESC_CANCEL, ""));
+                        inputQueue.offer(new InputEvent.CancelAgent());
                     } else {
-                        inputQueue.offer(new InputEvent.ExecuteCommand(InputEvent.CommandType.ESC_CANCEL, ""));
+                        inputQueue.offer(new InputEvent.CancelAgent());
                     }
                 }
                 case TerminalInput.Character(var code) -> {
@@ -172,7 +157,7 @@ public class InputSystem {
                     if (code == 3) {
                         if (hitlCoordinator != null && hitlCoordinator.isAwaiting()) {
                             inputQueue.offer(new InputEvent.HitlChoice(HitlChoice.DENY));
-                            inputQueue.offer(new InputEvent.ExecuteCommand(InputEvent.CommandType.ESC_CANCEL, ""));
+                            inputQueue.offer(new InputEvent.CancelAgent());
                             continue;
                         }
                         publishDraftSync("", 0);
@@ -216,13 +201,13 @@ public class InputSystem {
                 }
                 if (code == 3) {
                     inputQueue.offer(new InputEvent.HitlChoice(HitlChoice.DENY));
-                    inputQueue.offer(new InputEvent.ExecuteCommand(InputEvent.CommandType.ESC_CANCEL, ""));
+                    inputQueue.offer(new InputEvent.CancelAgent());
                     return true;
                 }
             }
             case TerminalInput.Escape() -> {
                 inputQueue.offer(new InputEvent.HitlChoice(HitlChoice.DENY));
-                inputQueue.offer(new InputEvent.ExecuteCommand(InputEvent.CommandType.ESC_CANCEL, ""));
+                inputQueue.offer(new InputEvent.CancelAgent());
                 return true;
             }
             case TerminalInput.Submit() -> {
@@ -276,55 +261,4 @@ public class InputSystem {
         }
     }
 
-    private InputEvent parseCommand(String input) {
-        if (input.toLowerCase().startsWith("/scroll")) {
-            return new InputEvent.ExecuteCommand(InputEvent.CommandType.SCROLL, input.substring(8).trim());
-        }
-        BuiltinCommandRegistry.ParseResult r = BuiltinCommandRegistry.parse(input);
-        if (r.type() == InputEvent.CommandType.UNKNOWN) {
-            return new InputEvent.ExecuteCommand(InputEvent.CommandType.UNKNOWN, r.hint());
-        }
-        if (r.type() == InputEvent.CommandType.RESUME) {
-            return handleResumeCommand();
-        }
-        return new InputEvent.ExecuteCommand(r.type(), r.args());
-    }
-
-    private InputEvent handleResumeCommand() {
-        if (orchestrator == null || projectSessionsDir == null) {
-            return new InputEvent.ExecuteCommand(InputEvent.CommandType.RESUME, "");
-        }
-
-        String blocked = ResumeGate.check(orchestrator.isAgentRunning(), orchestrator.isResuming());
-        if (blocked != null) {
-            publishSystemMessage("[" + blocked + "]");
-            return null;
-        }
-
-        try {
-            List<SessionListItem> items = SessionCatalog.list(projectSessionsDir);
-            if (items.isEmpty()) {
-                publishSystemMessage("[没有可恢复的会话]");
-                return null;
-            }
-            SessionListItem selected = SessionPicker.pick(terminal, items);
-            if (selected == null) {
-                publishSystemMessage("[已取消恢复会话]");
-                return null;
-            }
-            return new InputEvent.ResumeSession(selected.sessionId());
-        } catch (IOException e) {
-            publishSystemMessage("[读取会话列表失败: " + e.getMessage() + "]");
-            return null;
-        }
-    }
-
-    private void publishSystemMessage(String text) {
-        try {
-            renderQueue.put(new RenderEvent.AddSystemMessage(text));
-            renderQueue.put(new RenderEvent.FinalizeMessage());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-    }
 }
