@@ -208,7 +208,8 @@ public class TerminalChatApplication {
             terminal, renderQueue, theme, providerName, modelName, inputLayout);
         InputSystem inputSystem = new InputSystem(
             terminal, inputQueue, renderQueue, inputLayout, orchestrator.hitlCoordinator(),
-            orchestrator, projectRoot.resolve(".lavendercode/sessions"));
+            orchestrator, projectRoot.resolve(".lavendercode/sessions"),
+            registry);
 
         // Threads
         Thread inputThread = new Thread(inputSystem::run, "lavender-input");
