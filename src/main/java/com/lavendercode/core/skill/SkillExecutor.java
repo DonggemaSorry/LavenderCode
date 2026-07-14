@@ -35,4 +35,29 @@ public final class SkillExecutor {
             }
         }
     }
+
+    // --- executeInline ---
+
+    public static String executeInline(SkillCatalog.Skill skill, String args, SkillHost host) {
+        assertAllowedToolsExist(skill.meta().allowedTools(), host);
+        String body = skill.promptBody();
+        String rendered = substituteArguments(body, args);
+        host.activateSkill(skill.meta().name(), rendered);
+        if (skill.meta().allowedTools() != null) {
+            host.setToolFilter(name -> skill.meta().allowedTools().contains(name));
+        }
+        return rendered;
+    }
+
+    // --- executeFork ---
+
+    public static String executeFork(SkillCatalog.Skill skill, String args, SkillForkHost host) {
+        assertAllowedToolsExist(skill.meta().allowedTools(), host);
+        String body = skill.promptBody();
+        String rendered = substituteArguments(body, args);
+        List<Message> seed = buildForkSeed(skill.meta().forkContext(),
+                                            host.snapshotParentMessages());
+        return host.runSubAgent(rendered, seed, skill.meta().allowedTools(),
+                                skill.meta().model());
+    }
 }
