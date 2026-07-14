@@ -20,7 +20,7 @@ class CommandHandlerTest {
     }
 
     private void execute(String name) {
-        registry.find(name).orElseThrow().handler().execute(ctx);
+        registry.find(name).orElseThrow().handler().execute(ctx, null);
     }
 
     @Test

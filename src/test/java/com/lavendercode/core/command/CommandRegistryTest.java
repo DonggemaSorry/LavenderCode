@@ -8,7 +8,7 @@ class CommandRegistryTest {
 
     private static CommandDefinition def(String name, List<String> aliases, CommandKind kind) {
         return new CommandDefinition(
-            new CommandMetadata(name, aliases, "desc", kind, false), ctx -> {});
+            new CommandMetadata(name, aliases, "desc", kind, false), (ctx, args) -> null);
     }
 
     @Test
@@ -58,9 +58,9 @@ class CommandRegistryTest {
     @Test
     void duplicateAliasThrowsAtConstruction() {
         var def1 = new CommandDefinition(
-            new CommandMetadata("exit", List.of("quit"), "退出", CommandKind.UI, false), ctx -> {});
+            new CommandMetadata("exit", List.of("quit"), "退出", CommandKind.UI, false), (ctx, args) -> null);
         var def2 = new CommandDefinition(
-            new CommandMetadata("leave", List.of("quit"), "离开", CommandKind.UI, false), ctx -> {});
+            new CommandMetadata("leave", List.of("quit"), "离开", CommandKind.UI, false), (ctx, args) -> null);
         assertThatThrownBy(() -> new CommandRegistry(List.of(def1, def2)))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("quit");
@@ -69,9 +69,9 @@ class CommandRegistryTest {
     @Test
     void nameAndAliasCrossCollisionThrows() {
         var def1 = new CommandDefinition(
-            new CommandMetadata("help", List.of(), "帮助", CommandKind.LOCAL, false), ctx -> {});
+            new CommandMetadata("help", List.of(), "帮助", CommandKind.LOCAL, false), (ctx, args) -> null);
         var def2 = new CommandDefinition(
-            new CommandMetadata("assist", List.of("help"), "辅助", CommandKind.LOCAL, false), ctx -> {});
+            new CommandMetadata("assist", List.of("help"), "辅助", CommandKind.LOCAL, false), (ctx, args) -> null);
         assertThatThrownBy(() -> new CommandRegistry(List.of(def1, def2)))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("help");
@@ -80,9 +80,9 @@ class CommandRegistryTest {
     @Test
     void caseInsensitiveConflictDetected() {
         var def1 = new CommandDefinition(
-            new CommandMetadata("Exit", List.of(), "退出", CommandKind.UI, false), ctx -> {});
+            new CommandMetadata("Exit", List.of(), "退出", CommandKind.UI, false), (ctx, args) -> null);
         var def2 = new CommandDefinition(
-            new CommandMetadata("exit", List.of(), "重复", CommandKind.UI, false), ctx -> {});
+            new CommandMetadata("exit", List.of(), "重复", CommandKind.UI, false), (ctx, args) -> null);
         assertThatThrownBy(() -> new CommandRegistry(List.of(def1, def2)))
             .isInstanceOf(IllegalStateException.class);
     }
@@ -102,9 +102,9 @@ class CommandRegistryTest {
     @Test
     void hiddenCommandsExcludedFromVisibleButInAll() {
         var hidden = new CommandDefinition(
-            new CommandMetadata("secret", List.of(), "hidden", CommandKind.LOCAL, true), ctx -> {});
+            new CommandMetadata("secret", List.of(), "hidden", CommandKind.LOCAL, true), (ctx, args) -> null);
         var visible = new CommandDefinition(
-            new CommandMetadata("exit", List.of(), "退出", CommandKind.UI, false), ctx -> {});
+            new CommandMetadata("exit", List.of(), "退出", CommandKind.UI, false), (ctx, args) -> null);
         var registry = new CommandRegistry(List.of(hidden, visible));
         assertThat(registry.visibleCommands()).hasSize(1);
         assertThat(registry.allCommands()).hasSize(2);

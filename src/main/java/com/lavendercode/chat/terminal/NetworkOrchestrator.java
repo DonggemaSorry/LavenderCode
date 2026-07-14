@@ -480,7 +480,9 @@ public class NetworkOrchestrator {
         String trimmed = rawInput.trim();
         if (trimmed.isEmpty()) return false;
         String body = trimmed.substring(1).trim();
-        String cmdName = body.split("\\s+", 2)[0].toLowerCase();
+        String[] parts = body.split("\\s+", 2);
+        String cmdName = parts[0].toLowerCase();
+        String args = parts.length > 1 ? parts[1] : null;
         var found = commandRegistry.find(cmdName);
         if (found.isEmpty()) {
             deltaBuffer.forceFlush();
@@ -497,7 +499,16 @@ public class NetworkOrchestrator {
             return false;
         }
         try {
-            def.handler().execute(commandContext);
+            String result = def.handler().execute(commandContext, args);
+            if (result != null && kind == com.lavendercode.core.command.CommandKind.PROMPT) {
+                commandContext.injectUserMessage(result);
+                if (def.metadata().description() != null
+                    && def.metadata().description().contains("[skill]")) {
+                    safePut(new RenderEvent.AddSystemMessage(
+                        "Successfully loaded skill: " + def.metadata().name()));
+                    safePut(new RenderEvent.FinalizeMessage());
+                }
+            }
         } catch (Exception e) {
             safePut(new RenderEvent.AddSystemMessage(
                 "[命令执行异常: " + e.getMessage() + "]"));

@@ -72,7 +72,7 @@ class NetworkOrchestratorCommandTest {
         var ctx = new CommandContextImpl(orchestrator, null, null);
         var registry = new CommandRegistry(BuiltinCommandRegistrar.builtinCommands());
         var statusDef = registry.find("status").orElseThrow();
-        statusDef.handler().execute(ctx);
+        statusDef.handler().execute(ctx, null);
         RenderEvent event = pollUntil(RenderEvent.AddSystemMessage.class);
         assertThat(event).isNotNull();
         var text = ((RenderEvent.AddSystemMessage) event).text();
@@ -84,7 +84,7 @@ class NetworkOrchestratorCommandTest {
         var ctx = new CommandContextImpl(orchestrator, null, null);
         var registry = new CommandRegistry(BuiltinCommandRegistrar.builtinCommands());
         var permDef = registry.find("permission").orElseThrow();
-        permDef.handler().execute(ctx);
+        permDef.handler().execute(ctx, null);
         RenderEvent event = pollUntil(RenderEvent.AddSystemMessage.class);
         assertThat(event).isNotNull();
     }
@@ -94,7 +94,7 @@ class NetworkOrchestratorCommandTest {
         var ctx = new CommandContextImpl(orchestrator, null, null);
         var registry = new CommandRegistry(BuiltinCommandRegistrar.builtinCommands());
         var sessionDef = registry.find("session").orElseThrow();
-        sessionDef.handler().execute(ctx);
+        sessionDef.handler().execute(ctx, null);
         RenderEvent event = pollUntil(RenderEvent.AddSystemMessage.class);
         assertThat(event).isNotNull();
         assertThat(((RenderEvent.AddSystemMessage) event).text()).contains("Session ID:");

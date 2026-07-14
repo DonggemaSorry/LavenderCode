@@ -23,7 +23,7 @@ class CompletionMenuControllerTest {
 
     private static CommandDefinition def(String name, CommandKind kind) {
         return new CommandDefinition(
-            new CommandMetadata(name, List.of(), "desc", kind, false), ctx -> {});
+            new CommandMetadata(name, List.of(), "desc", kind, false), (ctx, args) -> null);
     }
 
     @BeforeEach
@@ -125,9 +125,9 @@ class CompletionMenuControllerTest {
     @Test
     void hiddenCommandsNotShown() {
         var hiddenDef = new CommandDefinition(
-            new CommandMetadata("secret", List.of(), "hidden", CommandKind.LOCAL, true), ctx -> {});
+            new CommandMetadata("secret", List.of(), "hidden", CommandKind.LOCAL, true), (ctx, args) -> null);
         var visibleDef = new CommandDefinition(
-            new CommandMetadata("exit", List.of(), "退出", CommandKind.UI, false), ctx -> {});
+            new CommandMetadata("exit", List.of(), "退出", CommandKind.UI, false), (ctx, args) -> null);
         var registry = new CommandRegistry(List.of(hiddenDef, visibleDef));
         var ctrl = new CompletionMenuController(registry);
         ctrl.onInputChanged("/");

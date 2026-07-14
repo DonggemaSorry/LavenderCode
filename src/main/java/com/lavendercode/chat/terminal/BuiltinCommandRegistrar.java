@@ -20,18 +20,18 @@ public final class BuiltinCommandRegistrar {
 
     public static List<CommandDefinition> builtinCommands() {
         return List.of(
-            def("clear",   List.of(),       "清空对话并开启新会话",     CommandKind.UI,     ctx -> ctx.clearAndNewSession()),
-            def("compact", List.of(),       "手动压缩上下文",           CommandKind.UI,     ctx -> ctx.triggerCompact()),
-            def("do",      List.of(),       "退出计划模式并开始执行",    CommandKind.PROMPT, ctx -> { ctx.exitPlanToDefault(); ctx.injectUserMessage("请根据以上计划开始执行"); }),
-            def("exit",    List.of("quit"), "退出 LavenderCode",        CommandKind.UI,     ctx -> ctx.shutdown()),
-            def("help",    List.of(),       "显示可用命令列表",         CommandKind.LOCAL,  ctx -> ctx.printMessage(formatHelp())),
-            def("memory",  List.of(),       "显示已加载的记忆文件列表",  CommandKind.LOCAL,  ctx -> ctx.printMessage(formatMemory(ctx))),
-            def("permission", List.of(),    "显示当前权限模式",         CommandKind.LOCAL,  ctx -> ctx.printMessage(ctx.currentModeLabel())),
-            def("plan",    List.of(),       "进入计划模式（仅只读工具）", CommandKind.UI,     ctx -> ctx.enterPlanMode()),
-            def("resume",  List.of(),       "从历史会话恢复",           CommandKind.UI,     ctx -> ctx.openSessionList()),
-            def("review",  List.of(),       "请求 AI 审查当前代码变更",  CommandKind.PROMPT, ctx -> ctx.injectUserMessage(REVIEW_PROMPT)),
-            def("session", List.of(),       "显示当前会话信息",         CommandKind.LOCAL,  ctx -> ctx.printMessage(formatSession(ctx))),
-            def("status",  List.of(),       "显示系统状态信息",         CommandKind.LOCAL,  ctx -> ctx.printMessage(formatStatus(ctx)))
+            def("clear",   List.of(),       "清空对话并开启新会话",     CommandKind.UI,     (ctx, args) -> { ctx.clearAndNewSession(); return null; }),
+            def("compact", List.of(),       "手动压缩上下文",           CommandKind.UI,     (ctx, args) -> { ctx.triggerCompact(); return null; }),
+            def("do",      List.of(),       "退出计划模式并开始执行",    CommandKind.PROMPT, (ctx, args) -> { ctx.exitPlanToDefault(); ctx.injectUserMessage("请根据以上计划开始执行"); return null; }),
+            def("exit",    List.of("quit"), "退出 LavenderCode",        CommandKind.UI,     (ctx, args) -> { ctx.shutdown(); return null; }),
+            def("help",    List.of(),       "显示可用命令列表",         CommandKind.LOCAL,  (ctx, args) -> { ctx.printMessage(formatHelp()); return null; }),
+            def("memory",  List.of(),       "显示已加载的记忆文件列表",  CommandKind.LOCAL,  (ctx, args) -> { ctx.printMessage(formatMemory(ctx)); return null; }),
+            def("permission", List.of(),    "显示当前权限模式",         CommandKind.LOCAL,  (ctx, args) -> { ctx.printMessage(ctx.currentModeLabel()); return null; }),
+            def("plan",    List.of(),       "进入计划模式（仅只读工具）", CommandKind.UI,     (ctx, args) -> { ctx.enterPlanMode(); return null; }),
+            def("resume",  List.of(),       "从历史会话恢复",           CommandKind.UI,     (ctx, args) -> { ctx.openSessionList(); return null; }),
+            def("review",  List.of(),       "请求 AI 审查当前代码变更",  CommandKind.PROMPT, (ctx, args) -> { ctx.injectUserMessage(REVIEW_PROMPT); return null; }),
+            def("session", List.of(),       "显示当前会话信息",         CommandKind.LOCAL,  (ctx, args) -> { ctx.printMessage(formatSession(ctx)); return null; }),
+            def("status",  List.of(),       "显示系统状态信息",         CommandKind.LOCAL,  (ctx, args) -> { ctx.printMessage(formatStatus(ctx)); return null; })
         );
     }
 
