@@ -98,6 +98,10 @@ public class LavenderCode {
             SessionManager sessionManager = new PersistingSessionManager(inner, writer, selectedProvider.model());
             ContextManager contextManager = handle.contextManager();
 
+            com.lavendercode.core.skill.SkillCatalog skillCatalog =
+                new com.lavendercode.core.skill.SkillCatalog();
+            skillCatalog.loadCatalog(projectRoot);
+
             TerminalChatApplication app = new TerminalChatApplication(
                 sessionManager, provider,
                 providerName, selectedProvider.model(), config,
@@ -107,7 +111,8 @@ public class LavenderCode {
                 handle,
                 writer,
                 instructions,
-                memoryService
+                memoryService,
+                skillCatalog
             );
             app.run(terminal);
         } finally {

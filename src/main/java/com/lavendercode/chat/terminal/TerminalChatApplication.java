@@ -6,6 +6,7 @@ import com.lavendercode.core.context.ContextManager;
 import com.lavendercode.core.context.SessionHandle;
 import com.lavendercode.core.memory.MemoryService;
 import com.lavendercode.core.provider.LlmProvider;
+import com.lavendercode.core.skill.SkillCatalog;
 import org.jline.terminal.Terminal;
 
 import java.io.Closeable;
@@ -31,6 +32,7 @@ public class TerminalChatApplication {
     private final String fileInstructions;
     private final Supplier<String> memoryIndexSupplier;
     private final MemoryService memoryService;
+    private final SkillCatalog skillCatalog;
 
     public TerminalChatApplication(SessionManager sessionManager,
                                    LlmProvider provider,
@@ -79,7 +81,7 @@ public class TerminalChatApplication {
                                    String fileInstructions,
                                    Supplier<String> memoryIndexSupplier) {
         this(sessionManager, provider, providerName, modelName, config, theme, projectRoot,
-            contextManager, null, closeOnShutdown, fileInstructions, memoryIndexSupplier, null);
+            contextManager, null, closeOnShutdown, fileInstructions, memoryIndexSupplier, null, null);
     }
 
     public TerminalChatApplication(SessionManager sessionManager,
@@ -96,7 +98,7 @@ public class TerminalChatApplication {
         this(sessionManager, provider, providerName, modelName, config, theme, projectRoot,
             contextManager, null, closeOnShutdown, fileInstructions,
             memoryService != null ? memoryService::currentIndex : () -> "",
-            memoryService);
+            memoryService, null);
     }
 
     public TerminalChatApplication(SessionManager sessionManager,
@@ -112,7 +114,7 @@ public class TerminalChatApplication {
                                    String fileInstructions,
                                    Supplier<String> memoryIndexSupplier) {
         this(sessionManager, provider, providerName, modelName, config, theme, projectRoot,
-            contextManager, sessionHandle, closeOnShutdown, fileInstructions, memoryIndexSupplier, null);
+            contextManager, sessionHandle, closeOnShutdown, fileInstructions, memoryIndexSupplier, null, null);
     }
 
     public TerminalChatApplication(SessionManager sessionManager,
@@ -126,11 +128,12 @@ public class TerminalChatApplication {
                                    SessionHandle sessionHandle,
                                    Closeable closeOnShutdown,
                                    String fileInstructions,
-                                   MemoryService memoryService) {
+                                   MemoryService memoryService,
+                                   SkillCatalog skillCatalog) {
         this(sessionManager, provider, providerName, modelName, config, theme, projectRoot,
             contextManager, sessionHandle, closeOnShutdown, fileInstructions,
             memoryService != null ? memoryService::currentIndex : () -> "",
-            memoryService);
+            memoryService, skillCatalog);
     }
 
     private TerminalChatApplication(SessionManager sessionManager,
@@ -145,7 +148,8 @@ public class TerminalChatApplication {
                                     Closeable closeOnShutdown,
                                     String fileInstructions,
                                     Supplier<String> memoryIndexSupplier,
-                                    MemoryService memoryService) {
+                                    MemoryService memoryService,
+                                    SkillCatalog skillCatalog) {
         this.sessionManager = sessionManager;
         this.provider = provider;
         this.providerName = providerName;
@@ -159,6 +163,7 @@ public class TerminalChatApplication {
         this.fileInstructions = fileInstructions != null ? fileInstructions : "";
         this.memoryIndexSupplier = memoryIndexSupplier != null ? memoryIndexSupplier : () -> "";
         this.memoryService = memoryService;
+        this.skillCatalog = skillCatalog;
     }
 
     public TerminalChatApplication(SessionManager sessionManager,
@@ -198,7 +203,26 @@ public class TerminalChatApplication {
                 memoryIndexSupplier,
                 sessionHandle
             );
-        var defs = BuiltinCommandRegistrar.builtinCommands();
+        var defs = new java.util.ArrayList<>(BuiltinCommandRegistrar.builtinCommands());
+        if (skillCatalog != null) {
+            var existingNames = new java.util.HashSet<String>();
+            for (var d : defs) existingNames.add(d.metadata().name());
+            for (var meta : skillCatalog.list()) {
+                if (existingNames.contains(meta.name())) continue;
+                String desc = (meta.description() != null ? meta.description() : meta.name()) + " [skill]";
+                final String skillName = meta.name();
+                defs.add(new com.lavendercode.core.command.CommandDefinition(
+                    new com.lavendercode.core.command.CommandMetadata(
+                        skillName, java.util.List.of(), desc,
+                        com.lavendercode.core.command.CommandKind.PROMPT, false),
+                    (ctx, args) -> {
+                        var skill = skillCatalog.getFull(skillName);
+                        if (skill == null || skill.promptBody() == null) return null;
+                        return com.lavendercode.core.skill.SkillExecutor
+                            .substituteArguments(skill.promptBody(), args);
+                    }));
+            }
+        }
         var registry = new com.lavendercode.core.command.CommandRegistry(defs);
         BuiltinCommandRegistrar.bindRegistry(registry);
         var cmdCtx = new CommandContextImpl(orchestrator, terminal, projectRoot.resolve(".lavendercode/sessions"));

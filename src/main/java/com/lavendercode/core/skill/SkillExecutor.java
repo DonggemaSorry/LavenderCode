@@ -8,7 +8,7 @@ public final class SkillExecutor {
 
     private SkillExecutor() {}
 
-    static String substituteArguments(String body, String args) {
+    public static String substituteArguments(String body, String args) {
         if (args == null || args.isBlank()) return body;
         if (body.contains("$ARGUMENTS")) return body.replace("$ARGUMENTS", args);
         return body + "\n\n## User Request\n" + args;
