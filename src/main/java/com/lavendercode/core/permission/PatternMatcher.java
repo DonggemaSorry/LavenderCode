@@ -36,4 +36,21 @@ public final class PatternMatcher {
     }
 
     public MatchType type() { return type; }
+
+    public static PatternMatcher parse(String raw) {
+        if (raw == null || raw.isEmpty()) {
+            return new PatternMatcher(new MatchType.Glob(""));
+        }
+        return new PatternMatcher(parseType(raw));
+    }
+
+    private static MatchType parseType(String raw) {
+        char first = raw.charAt(0);
+        return switch (first) {
+            case '=' -> new MatchType.Exact(raw.substring(1));
+            case '~' -> new MatchType.Regex(raw.substring(1));
+            case '!' -> new MatchType.Not(parseType(raw.substring(1)));
+            default -> new MatchType.Glob(raw);
+        };
+    }
 }
