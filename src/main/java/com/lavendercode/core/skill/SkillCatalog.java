@@ -1,6 +1,12 @@
 package com.lavendercode.core.skill;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 public final class SkillCatalog {
@@ -94,5 +100,92 @@ public final class SkillCatalog {
             sb.append('\n');
         }
         return sb.toString().stripTrailing();
+    }
+
+    // --- parseSkillMD ---
+
+    private static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
+
+    static Skill parseSkillMD(Path dir) {
+        Path skillMd = dir.resolve("SKILL.md");
+        if (!Files.exists(skillMd)) return null;
+        try {
+            String content = Files.readString(skillMd);
+            return parseSkillMdContent(dir, content);
+        } catch (IOException e) {
+            System.err.println("WARN: 无法读取 SKILL.md: " + skillMd + " — " + e.getMessage());
+            return null;
+        }
+    }
+
+    static Skill parseSkillMdContent(Path dir, String content) {
+        String frontmatter = null;
+        String body = content;
+        if (content.startsWith("---\n") || content.startsWith("---\r\n")) {
+            int end = content.indexOf("\n---", 4);
+            if (end > 0) {
+                frontmatter = content.substring(4, end);
+                int bodyStart = end + 4;
+                while (bodyStart < content.length()
+                       && (content.charAt(bodyStart) == '\n'
+                           || content.charAt(bodyStart) == '\r')) {
+                    bodyStart++;
+                }
+                body = content.substring(bodyStart);
+            }
+        }
+        String dirName = dir.getFileName().toString();
+        if (frontmatter != null) {
+            try {
+                JsonNode node = YAML.readTree(frontmatter);
+                String name = text(node, "name");
+                String description = text(node, "description");
+                String whenToUse = text(node, "whenToUse");
+                List<String> tags = readStringList(node.get("tags"));
+                List<String> allowedTools = node.has("allowedTools")
+                    ? readStringList(node.get("allowedTools")) : null;
+                String mode = text(node, "mode");
+                if (mode == null) {
+                    mode = text(node, "context");
+                }
+                String model = text(node, "model");
+                String forkContext = text(node, "forkContext");
+                if (description == null) {
+                    description = firstNonHeadingLine(body);
+                }
+                var meta = SkillMeta.withDefaults(
+                    name != null ? name : dirName,
+                    description, whenToUse, tags, allowedTools, mode, model, forkContext);
+                return new Skill(meta, body, dir, true);
+            } catch (Exception e) {
+                System.err.println("WARN: SKILL.md frontmatter 解析失败，降级处理: " + e.getMessage());
+            }
+        }
+        String description = firstNonHeadingLine(body);
+        var meta = SkillMeta.withDefaults(dirName, description, null, List.of(), null, null, null, null);
+        return new Skill(meta, body, dir, true);
+    }
+
+    private static String firstNonHeadingLine(String body) {
+        String[] lines = body.split("\n");
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty() || trimmed.startsWith("#")) continue;
+            return trimmed;
+        }
+        return null;
+    }
+
+    private static String text(JsonNode node, String field) {
+        if (node == null) return null;
+        JsonNode value = node.get(field);
+        return value == null || value.isNull() ? null : value.asText();
+    }
+
+    private static List<String> readStringList(JsonNode node) {
+        if (node == null || !node.isArray()) return List.of();
+        List<String> list = new ArrayList<>();
+        node.forEach(item -> list.add(item.asText()));
+        return List.copyOf(list);
     }
 }
