@@ -1,5 +1,6 @@
 package com.lavendercode.chat.terminal;
 
+import com.lavendercode.core.command.CommandRegistry;
 import com.lavendercode.core.permission.HitlChoice;
 import org.jline.terminal.Attributes;
 import org.jline.terminal.Terminal;
@@ -25,6 +26,7 @@ public class InputSystem {
     private final HitlCoordinator hitlCoordinator;
     private final NetworkOrchestrator orchestrator;
     private final Path projectSessionsDir;
+    private final CompletionMenuController completionMenu;
     private final AtomicBoolean shutdown = new AtomicBoolean(false);
 
     public InputSystem(Terminal terminal,
@@ -49,6 +51,27 @@ public class InputSystem {
         this.hitlCoordinator = hitlCoordinator;
         this.orchestrator = orchestrator;
         this.projectSessionsDir = projectSessionsDir;
+        this.completionMenu = null;
+    }
+
+    public InputSystem(Terminal terminal,
+                       BlockingQueue<InputEvent> inputQueue,
+                       BlockingQueue<RenderEvent> renderQueue,
+                       InputAreaLayout inputLayout,
+                       HitlCoordinator hitlCoordinator,
+                       NetworkOrchestrator orchestrator,
+                       Path projectSessionsDir,
+                       CommandRegistry commandRegistry) {
+        this.terminal = terminal;
+        this.keyReader = new TerminalKeyReader(terminal);
+        this.inputQueue = inputQueue;
+        this.renderQueue = renderQueue;
+        this.hitlCoordinator = hitlCoordinator;
+        this.orchestrator = orchestrator;
+        this.projectSessionsDir = projectSessionsDir;
+        this.completionMenu = commandRegistry != null
+            ? new CompletionMenuController(commandRegistry)
+            : null;
     }
 
     public InputSystem(Terminal terminal,
@@ -103,6 +126,39 @@ public class InputSystem {
             if (hitlCoordinator != null && hitlCoordinator.isAwaiting()) {
                 if (handleHitlInput(input)) {
                     continue;
+                }
+            }
+
+            if (completionMenu != null && completionMenu.isActive()) {
+                switch (input) {
+                    case TerminalInput.Scroll(var cmd) when "up".equals(cmd) -> {
+                        completionMenu.navigateUp();
+                        renderQueue.offer(completionMenu.toRenderEvent());
+                        publishDraftSync(buffer.toString(), cursor);
+                        continue;
+                    }
+                    case TerminalInput.Scroll(var cmd) when "down".equals(cmd) -> {
+                        completionMenu.navigateDown();
+                        renderQueue.offer(completionMenu.toRenderEvent());
+                        publishDraftSync(buffer.toString(), cursor);
+                        continue;
+                    }
+                    case TerminalInput.Submit() -> {
+                        var selected = completionMenu.executeSelected();
+                        if (selected.isPresent()) {
+                            publishDraftSync("", 0);
+                            renderQueue.offer(completionMenu.toRenderEvent());
+                            return selected.get();
+                        }
+                        // Zero match: fall through to normal submit
+                    }
+                    case TerminalInput.Escape() -> {
+                        completionMenu.dismiss();
+                        renderQueue.offer(completionMenu.toRenderEvent());
+                        publishDraftSync(buffer.toString(), cursor);
+                        continue;
+                    }
+                    default -> { /* fall through to normal handling */ }
                 }
             }
 
@@ -171,15 +227,18 @@ public class InputSystem {
                             cursor--;
                             publishDraftSync(buffer.toString(), cursor);
                         }
-                        continue;
-                    }
-                    if (code >= 32) {
+                    } else if (code >= 32) {
                         buffer.insert(cursor, (char) code);
                         cursor++;
                         publishDraftSync(buffer.toString(), cursor);
                     }
                 }
                 default -> { /* ignore other specials during normal editing */ }
+            }
+
+            if (completionMenu != null) {
+                completionMenu.onInputChanged(buffer.toString());
+                renderQueue.offer(completionMenu.toRenderEvent());
             }
         }
     }
