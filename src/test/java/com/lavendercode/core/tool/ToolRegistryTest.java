@@ -9,6 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ToolRegistryTest {
     @AfterEach
     void cleanup() {
+        ToolRegistry.clearFilter();
         ToolRegistry.clear();
     }
 

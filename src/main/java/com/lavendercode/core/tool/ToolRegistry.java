@@ -5,9 +5,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 
 public class ToolRegistry {
     private static final Map<String, Tool> tools = new ConcurrentHashMap<>();
+    private static volatile Predicate<String> filter = null;
 
     public static void register(Tool tool) {
         tools.put(tool.name(), tool);
@@ -33,9 +35,18 @@ public class ToolRegistry {
         tools.clear();
     }
 
+    public static void setFilter(Predicate<String> filter) {
+        ToolRegistry.filter = filter;
+    }
+
+    public static void clearFilter() {
+        ToolRegistry.filter = null;
+    }
+
     public static List<ToolDefinition> export() {
         List<ToolDefinition> defs = new ArrayList<>();
         for (Tool tool : tools.values()) {
+            if (filter != null && !filter.test(tool.name())) continue;
             defs.add(toDefinition(tool));
         }
         return defs;
@@ -44,6 +55,7 @@ public class ToolRegistry {
     public static List<ToolDefinition> exportReadOnly() {
         List<ToolDefinition> defs = new ArrayList<>();
         for (Tool tool : tools.values()) {
+            if (filter != null && !filter.test(tool.name())) continue;
             if (tool.isReadOnly()) defs.add(toDefinition(tool));
         }
         return defs;
