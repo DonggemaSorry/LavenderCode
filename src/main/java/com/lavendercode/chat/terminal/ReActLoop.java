@@ -5,9 +5,13 @@ import com.lavendercode.core.config.LlmConfig;
 import com.lavendercode.core.context.CompactTrigger;
 import com.lavendercode.core.context.ContextManager;
 import com.lavendercode.core.prompt.PromptContext;
+import com.lavendercode.core.hook.HookEngine;
+import com.lavendercode.core.hook.HookEvent;
+import com.lavendercode.core.hook.HookPayload;
 import com.lavendercode.core.prompt.ReminderInjector;
 import com.lavendercode.core.provider.*;
 import com.lavendercode.core.tool.*;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -29,6 +33,9 @@ public class ReActLoop {
     private String stablePrompt;
     private String environmentInfo;
     private PermissionModeManager modeManager;
+    private HookEngine hookEngine;
+
+    public void setHookEngine(HookEngine hookEngine) { this.hookEngine = hookEngine; }
 
     public ReActLoop(LlmProvider provider, SessionManager sessionManager,
                      BatchingToolExecutor batchExecutor, TokenAccumulator tokenAccumulator,
@@ -73,12 +80,24 @@ public class ReActLoop {
             PromptContext promptCtx = null;
             if (stablePrompt != null) {
                 Optional<String> reminder = ReminderInjector.inject(
-                    iteration, modeManager != null && modeManager.isPlanMode());
+                    iteration, modeManager != null && modeManager.isPlanMode(),
+                    hookEngine != null ? hookEngine.reminderQueue() : null);
                 promptCtx = new PromptContext(stablePrompt, environmentInfo,
                     reminder.map(List::of).orElse(List.of()));
             }
 
             contextManager.manageContext(CompactTrigger.AUTO, toolDefs);
+
+            // PreUserMessage hook
+            if (hookEngine != null) {
+                var payload = HookPayload.builder(HookEvent.PreUserMessage)
+                    .sessionId("")
+                    .cwd(Path.of(System.getProperty("user.dir")))
+                    .mode(modeManager != null && modeManager.isPlanMode() ? "plan" : "default")
+                    .put("prompt", userMessage)
+                    .build();
+                hookEngine.dispatch(HookEvent.PreUserMessage, payload, cancelFlag);
+            }
 
             // 1. Stream collect
             boolean emergencyRetried = false;
@@ -128,6 +147,15 @@ public class ReActLoop {
             if (result.noTools()) {
                 sessionManager.addAssistantMessage(result.fullText());
                 sink.accept(new AgentEvent.Complete());
+                if (hookEngine != null) {
+                    var stopPayload = HookPayload.builder(HookEvent.Stop)
+                        .sessionId("")
+                        .cwd(Path.of(System.getProperty("user.dir")))
+                        .mode(modeManager != null && modeManager.isPlanMode() ? "plan" : "default")
+                        .put("iter", iteration)
+                        .build();
+                    hookEngine.dispatch(HookEvent.Stop, stopPayload, cancelFlag);
+                }
                 return; // AC2
             }
 
@@ -159,12 +187,30 @@ public class ReActLoop {
             // 10. Max iterations (checked before unknown tools — system limit takes priority)
             if (iteration >= maxIterations) {
                 sink.accept(new AgentEvent.Stopped(AgentEvent.StopReason.MAX_ITERATIONS, "已达迭代上限"));
+                if (hookEngine != null) {
+                    var stopPayload = HookPayload.builder(HookEvent.Stop)
+                        .sessionId("")
+                        .cwd(Path.of(System.getProperty("user.dir")))
+                        .mode(modeManager != null && modeManager.isPlanMode() ? "plan" : "default")
+                        .put("iter", iteration)
+                        .build();
+                    hookEngine.dispatch(HookEvent.Stop, stopPayload, cancelFlag);
+                }
                 return; // AC3
             }
 
             // 11. Unknown tools stop
             if (unknownStreak >= maxUnknownRounds) {
                 sink.accept(new AgentEvent.Stopped(AgentEvent.StopReason.UNKNOWN_TOOLS, "连续请求未知工具"));
+                if (hookEngine != null) {
+                    var stopPayload = HookPayload.builder(HookEvent.Stop)
+                        .sessionId("")
+                        .cwd(Path.of(System.getProperty("user.dir")))
+                        .mode(modeManager != null && modeManager.isPlanMode() ? "plan" : "default")
+                        .put("iter", iteration)
+                        .build();
+                    hookEngine.dispatch(HookEvent.Stop, stopPayload, cancelFlag);
+                }
                 return; // AC4
             }
 
