@@ -42,6 +42,10 @@ public class TerminalRenderer {
     private int[] blockStartLines;
     private boolean flatCacheDirty = true;
 
+    private List<RenderEvent.CompletionEntry> completionEntries = List.of();
+    private int completionSelectedIndex = 0;
+    private boolean completionVisible = false;
+
     public TerminalRenderer(Terminal terminal, BlockingQueue<RenderEvent> renderQueue,
                             Theme theme, String providerName, String modelName,
                             InputAreaLayout inputLayout) {
@@ -190,7 +194,11 @@ public class TerminalRenderer {
             }
             case RenderEvent.RefreshAll() -> drawFull();
             case RenderEvent.CompletionMenu(var entries, int selected, boolean visible) -> {
-                // Rendering will be implemented in Task 12
+                completionEntries = entries;
+                completionSelectedIndex = selected;
+                completionVisible = visible;
+                drawViewport();
+                drawInputDraft("", 0);
             }
             case RenderEvent.CompletionEntry(var name, var description) -> {
                 // Completion entry rendering will be implemented in Task 12
@@ -209,6 +217,7 @@ public class TerminalRenderer {
             drawPermissionPrompt();
         }
         drawInputDraft("", 0);
+        drawCompletionMenu();
     }
 
     private void drawPermissionPrompt() {
@@ -253,6 +262,27 @@ public class TerminalRenderer {
         terminal.puts(InfoCmp.Capability.cursor_address, startRow + boxHeight - 1, 1);
         terminal.writer().print(theme.apply(StyleCatalog.INPUT_BORDER,
             "\u2514" + "\u2500".repeat(width)).toAnsi(terminal));
+        terminal.flush();
+    }
+
+    private void drawCompletionMenu() {
+        if (!completionVisible || completionEntries.isEmpty()) return;
+        int maxWidth = terminal.getWidth() - 4;
+        int menuHeight = Math.min(8, completionEntries.size());
+        int startRow = separatorTopRow - menuHeight;
+        for (int i = 0; i < menuHeight; i++) {
+            int entryIdx = i;
+            if (entryIdx >= completionEntries.size()) break;
+            var entry = completionEntries.get(entryIdx);
+            boolean selected = entryIdx == completionSelectedIndex;
+            terminal.puts(InfoCmp.Capability.cursor_address, startRow + i, 0);
+            terminal.puts(InfoCmp.Capability.clr_eol);
+            String prefix = selected ? "\u276F " : "  ";
+            String line = prefix + "/" + entry.name() + "  " + entry.description();
+            if (line.length() > maxWidth) line = line.substring(0, maxWidth);
+            var style = selected ? StyleCatalog.PROMPT : StyleCatalog.ASSISTANT_MESSAGE;
+            terminal.writer().print(theme.apply(style, line).toAnsi(terminal));
+        }
         terminal.flush();
     }
 
@@ -403,6 +433,7 @@ public class TerminalRenderer {
             drawScrollbarCell(screenRow, totalLines);
         }
         terminal.flush();
+        drawCompletionMenu();
     }
 
     private void drawDiff(int startRow, int count) {
