@@ -55,4 +55,12 @@ class PatternMatcherTest {
         var m = new PatternMatcher(new MatchType.Glob(""));
         assertThat(m.matches("anything")).isTrue();
     }
+
+    @Test
+    void regexUsesFindSemantics() {
+        // find() 子串匹配：无锚点时匹配子串
+        var m = new PatternMatcher(new MatchType.Regex("rm"));
+        assertThat(m.matches("echo rm -rf")).isTrue();
+        assertThat(m.matches("ls -lh")).isFalse();
+    }
 }

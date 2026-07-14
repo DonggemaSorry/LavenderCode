@@ -5,6 +5,7 @@ import java.util.regex.Pattern;
 public final class PatternMatcher {
     private final MatchType type;
     private final Pattern compiledRegex;
+    private final PatternMatcher innerMatcher;
 
     public PatternMatcher(MatchType type) {
         this.type = type;
@@ -17,6 +18,11 @@ public final class PatternMatcher {
         } else {
             this.compiledRegex = null;
         }
+        if (type instanceof MatchType.Not n) {
+            this.innerMatcher = new PatternMatcher(n.inner());
+        } else {
+            this.innerMatcher = null;
+        }
     }
 
     public boolean matches(String input) {
@@ -25,7 +31,7 @@ public final class PatternMatcher {
             case MatchType.Exact e -> input.equals(e.value());
             case MatchType.Glob g -> GlobMatcher.matches(input, g.value(), false);
             case MatchType.Regex r -> compiledRegex.matcher(input).find();
-            case MatchType.Not n -> !new PatternMatcher(n.inner()).matches(input);
+            case MatchType.Not n -> !innerMatcher.matches(input);
         };
     }
 
