@@ -95,7 +95,69 @@ class SkillCatalogTest {
         assertThat(catalog.buildActiveContext()).isEmpty();
     }
 
-    // --- loadFromDirectory tests (added in Task 5) ---
+    // --- loadFromDirectory tests ---
+
+    @Test
+    void loadFromDirectoryLoadsYamlFormat() throws java.io.IOException {
+        Path skillDir = tempDir.resolve("skills").resolve("commit");
+        java.nio.file.Files.createDirectories(skillDir);
+        java.nio.file.Files.writeString(skillDir.resolve("skill.yaml"),
+            "name: commit\ndescription: 提交\n");
+        java.nio.file.Files.writeString(skillDir.resolve("prompt.md"), "body");
+        var catalog = new SkillCatalog();
+        catalog.loadFromDirectory(tempDir.resolve("skills"));
+        assertThat(catalog.get("commit")).isNotNull();
+        assertThat(catalog.get("commit").meta().description()).isEqualTo("提交");
+    }
+
+    @Test
+    void loadFromDirectoryLoadsSkillMdFormat() throws java.io.IOException {
+        Path skillDir = tempDir.resolve("skills").resolve("review");
+        java.nio.file.Files.createDirectories(skillDir);
+        java.nio.file.Files.writeString(skillDir.resolve("SKILL.md"),
+            "# Review\nDescription line.\nbody");
+        var catalog = new SkillCatalog();
+        catalog.loadFromDirectory(tempDir.resolve("skills"));
+        assertThat(catalog.get("review")).isNotNull();
+        assertThat(catalog.get("review").meta().description()).isEqualTo("Description line.");
+    }
+
+    @Test
+    void loadFromDirectorySkipsParseFailures() throws java.io.IOException {
+        Path ok = tempDir.resolve("skills").resolve("ok");
+        java.nio.file.Files.createDirectories(ok);
+        java.nio.file.Files.writeString(ok.resolve("SKILL.md"), "# OK\nbody");
+        Path bad = tempDir.resolve("skills").resolve("bad");
+        java.nio.file.Files.createDirectories(bad);
+        java.nio.file.Files.writeString(bad.resolve("SKILL.md"), "");
+        var catalog = new SkillCatalog();
+        catalog.loadFromDirectory(tempDir.resolve("skills"));
+        assertThat(catalog.get("ok")).isNotNull();
+    }
+
+    @Test
+    void loadFromDirectoryNonExistentDoesNotThrow() {
+        var catalog = new SkillCatalog();
+        catalog.loadFromDirectory(tempDir.resolve("nonexistent"));
+        assertThat(catalog.list()).isEmpty();
+    }
+
+    @Test
+    void loadFromDirectoryYamlTakesPrecedence() throws java.io.IOException {
+        Path skillDir = tempDir.resolve("skills").resolve("dual");
+        java.nio.file.Files.createDirectories(skillDir);
+        java.nio.file.Files.writeString(skillDir.resolve("skill.yaml"),
+            "name: dual\ndescription: from yaml\n");
+        java.nio.file.Files.writeString(skillDir.resolve("prompt.md"), "body");
+        java.nio.file.Files.writeString(skillDir.resolve("SKILL.md"), "# dual\nfrom md");
+        var catalog = new SkillCatalog();
+        catalog.loadFromDirectory(tempDir.resolve("skills"));
+        var skill = catalog.get("dual");
+        assertThat(skill).isNotNull();
+        assertThat(skill.promptBody()).isNull();
+        assertThat(skill.bodyLoaded()).isFalse();
+    }
+
     // --- loadCatalog tests (added in Task 6) ---
 
     @TempDir

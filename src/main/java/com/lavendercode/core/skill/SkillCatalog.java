@@ -220,4 +220,29 @@ public final class SkillCatalog {
             return null;
         }
     }
+
+    // --- loadFromDirectory ---
+
+    public void loadFromDirectory(Path dir) {
+        if (!Files.isDirectory(dir)) return;
+        try (var stream = Files.list(dir)) {
+            stream.filter(Files::isDirectory)
+                  .forEach(subDir -> {
+                      try {
+                          Skill skill = loadFromYamlAndPrompt(subDir);
+                          if (skill == null) {
+                              skill = parseSkillMD(subDir);
+                          }
+                          if (skill != null) {
+                              register(skill);
+                          }
+                      } catch (Exception e) {
+                          System.err.println("WARN: 加载技能目录失败: " + subDir
+                              + " — " + e.getMessage());
+                      }
+                  });
+        } catch (IOException e) {
+            System.err.println("WARN: 读取技能目录失败: " + dir + " — " + e.getMessage());
+        }
+    }
 }
