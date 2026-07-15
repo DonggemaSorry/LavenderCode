@@ -41,13 +41,18 @@ public class GlobTool implements Tool {
 
     @Override
     public ToolResult execute(Map<String, Object> params) {
+        return execute(ToolContext.empty(), params);
+    }
+
+    @Override
+    public ToolResult execute(ToolContext ctx, Map<String, Object> params) {
         String pattern = (String) params.get("pattern");
         if (pattern == null || pattern.isBlank()) {
             return ToolResult.error("INVALID_PARAMETER", "pattern 为空", "pattern is null or blank");
         }
 
         String dirStr = (String) params.get("directory");
-        Path dir = dirStr != null ? Path.of(dirStr) : Path.of(System.getProperty("user.dir"));
+        Path dir = dirStr != null ? ctx.resolvePath(dirStr) : ctx.resolvePath("");
 
         if (!Files.isDirectory(dir)) {
             return ToolResult.error("INVALID_PARAMETER", "目录不存在·" + dir, dir.toString());

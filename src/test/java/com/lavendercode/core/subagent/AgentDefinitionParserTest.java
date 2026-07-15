@@ -42,15 +42,30 @@ class AgentDefinitionParserTest {
     }
 
     @Test
-    void invalidNameThrows() {
+    void parsesIsolationWorktree() {
         String md = """
             ---
-            name: Invalid_Name
+            name: coder
             description: d
+            isolation: worktree
             ---
             body
             """;
-        assertThatThrownBy(() -> AgentDefinitionParser.parse(md, AgentCatalog.Source.USER))
-            .isInstanceOf(AgentDefinitionParser.ParseException.class);
+        assertThat(AgentDefinitionParser.parse(md, AgentCatalog.Source.USER).isolation())
+            .isEqualTo("worktree");
+    }
+
+    @Test
+    void invalidIsolationFallsBackEmpty() {
+        String md = """
+            ---
+            name: coder
+            description: d
+            isolation: sandbox
+            ---
+            body
+            """;
+        assertThat(AgentDefinitionParser.parse(md, AgentCatalog.Source.USER).isolation())
+            .isEqualTo("");
     }
 }

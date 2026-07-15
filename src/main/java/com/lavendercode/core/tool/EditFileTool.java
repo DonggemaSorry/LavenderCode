@@ -30,6 +30,11 @@ public class EditFileTool implements Tool {
 
     @Override
     public ToolResult execute(Map<String, Object> params) {
+        return execute(ToolContext.empty(), params);
+    }
+
+    @Override
+    public ToolResult execute(ToolContext ctx, Map<String, Object> params) {
         String pathStr = (String) params.get("path");
         String oldStr = (String) params.get("old_string");
         String newStr = (String) params.get("new_string");
@@ -37,10 +42,7 @@ public class EditFileTool implements Tool {
         if (pathStr == null || pathStr.isBlank()) {
             return ToolResult.error("INVALID_PARAMETER", "路径无效", "path is null or blank");
         }
-        Path path = Path.of(pathStr);
-        if (!path.isAbsolute()) {
-            path = Path.of("").toAbsolutePath().resolve(pathStr).normalize();
-        }
+        Path path = ctx.resolvePath(pathStr);
         if (oldStr == null || oldStr.isEmpty()) {
             return ToolResult.error("INVALID_PARAMETER", "old_string 为空", "old_string is null or empty");
         }

@@ -137,4 +137,19 @@ final class CommandContextImpl implements CommandContext {
         sb.append("Loaded from: ").append(String.join(", ", config.sources()));
         return sb.toString().stripTrailing();
     }
+
+    @Override
+    public com.lavendercode.core.worktree.WorktreeManager worktreeManager() {
+        return orch.worktreeManager;
+    }
+
+    @Override
+    public Path activeCwd() {
+        return orch.activeCwd;
+    }
+
+    @Override
+    public void setActiveCwd(Path cwd) {
+        orch.activeCwd = cwd;
+    }
 }

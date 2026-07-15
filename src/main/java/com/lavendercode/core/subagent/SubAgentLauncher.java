@@ -55,13 +55,22 @@ public final class SubAgentLauncher {
                                              String prompt, boolean fork, boolean background,
                                              List<Message> seed, AtomicBoolean cancelFlag,
                                              java.util.concurrent.atomic.AtomicReference<List<Message>> conversationOut) {
+        return buildWork(services, def, prompt, fork, background, seed, cancelFlag, conversationOut,
+            com.lavendercode.core.tool.ToolContext.empty());
+    }
+
+    public static Callable<String> buildWork(SubAgentServices services, AgentDefinition def,
+                                             String prompt, boolean fork, boolean background,
+                                             List<Message> seed, AtomicBoolean cancelFlag,
+                                             java.util.concurrent.atomic.AtomicReference<List<Message>> conversationOut,
+                                             com.lavendercode.core.tool.ToolContext toolContext) {
         return () -> {
             var session = new InMemorySessionManager();
             if (seed != null && !seed.isEmpty()) {
                 session.replaceHistory(seed);
             }
             List<ToolDefinition> toolDefs = ToolFilter.filterDefinitions(def, fork, background);
-            var runner = services.createRunner(def);
+            var runner = services.createRunner(def, toolContext);
             String text = runner.runToCompletion(session, toolDefs, prompt, cancelFlag);
             if (conversationOut != null) {
                 conversationOut.set(List.copyOf(session.getHistory()));

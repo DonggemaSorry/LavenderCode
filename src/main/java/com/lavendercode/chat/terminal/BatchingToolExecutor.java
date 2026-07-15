@@ -14,20 +14,33 @@ public class BatchingToolExecutor {
     private final PermissionEvaluator pipeline;
     private final Path projectRoot;
     private final HookEngine hookEngine;
+    private final ToolContext toolContext;
 
     public BatchingToolExecutor(long defaultTimeoutSec, long commandTimeoutSec,
                                 PermissionEvaluator pipeline, Path projectRoot) {
-        this(defaultTimeoutSec, commandTimeoutSec, pipeline, projectRoot, null);
+        this(defaultTimeoutSec, commandTimeoutSec, pipeline, projectRoot, null, ToolContext.empty());
     }
 
     public BatchingToolExecutor(long defaultTimeoutSec, long commandTimeoutSec,
                                 PermissionEvaluator pipeline, Path projectRoot,
                                 HookEngine hookEngine) {
+        this(defaultTimeoutSec, commandTimeoutSec, pipeline, projectRoot, hookEngine, ToolContext.empty());
+    }
+
+    public BatchingToolExecutor(long defaultTimeoutSec, long commandTimeoutSec,
+                                PermissionEvaluator pipeline, Path projectRoot,
+                                HookEngine hookEngine, ToolContext toolContext) {
         this.defaultTimeoutSec = defaultTimeoutSec;
         this.commandTimeoutSec = commandTimeoutSec;
         this.pipeline = pipeline;
         this.projectRoot = projectRoot;
         this.hookEngine = hookEngine;
+        this.toolContext = toolContext != null ? toolContext : ToolContext.empty();
+    }
+
+    public BatchingToolExecutor withToolContext(ToolContext ctx) {
+        return new BatchingToolExecutor(defaultTimeoutSec, commandTimeoutSec,
+            pipeline, projectRoot, hookEngine, ctx);
     }
 
     public List<ToolResult> execute(List<ToolCall> calls, java.util.function.Consumer<AgentEvent> sink,
@@ -109,7 +122,7 @@ public class BatchingToolExecutor {
 
         long timeout = "execute_command".equals(tc.name()) ? commandTimeoutSec : defaultTimeoutSec;
         try {
-            var result = CompletableFuture.supplyAsync(() -> tool.execute(tc.parameters()))
+            var result = CompletableFuture.supplyAsync(() -> tool.execute(toolContext, tc.parameters()))
                 .orTimeout(timeout, TimeUnit.SECONDS)
                 .exceptionally(ex -> ToolResult.error("TIMEOUT", "超时·" + tc.name(), ex.getMessage()))
                 .get();

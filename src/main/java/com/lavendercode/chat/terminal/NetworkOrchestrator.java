@@ -30,9 +30,13 @@ import com.lavendercode.core.tool.*;
 import com.lavendercode.core.prompt.SystemPromptAssembler;
 import com.lavendercode.core.prompt.EnvironmentInfoCollector;
 import com.lavendercode.core.prompt.ToolDescriptionEnhancer;
+import com.lavendercode.core.worktree.WorktreeManager;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -79,6 +83,8 @@ public class NetworkOrchestrator {
     private final TaskNotificationQueue taskNotificationQueue;
     private final ForegroundSubAgentTracker foregroundTracker;
     private final SubAgentServices subAgentServices;
+    final WorktreeManager worktreeManager;
+    volatile Path activeCwd;
 
     public HookEngine hookEngine() { return hookEngine; }
 
@@ -205,11 +211,15 @@ public class NetworkOrchestrator {
         this.taskNotificationQueue = new TaskNotificationQueue();
         this.foregroundTracker = new ForegroundSubAgentTracker();
         this.taskManager.subscribeDone(taskNotificationQueue::offer);
+        this.worktreeManager = initWorktreeManager(projectRoot);
+        this.activeCwd = worktreeManager != null && worktreeManager.currentSession() != null
+            ? worktreeManager.currentSession().worktreePath() : null;
         this.subAgentServices = new SubAgentServices(
             agentCatalog, provider, config, projectRoot, options,
             permissionPipeline, hitlCoordinator, taskManager,
             taskNotificationQueue, foregroundTracker,
-            () -> sessionManager.getHistory());
+            () -> sessionManager.getHistory(),
+            worktreeManager);
     }
 
     public NetworkOrchestrator(DeltaBuffer deltaBuffer,
@@ -263,11 +273,49 @@ public class NetworkOrchestrator {
         this.taskNotificationQueue = new TaskNotificationQueue();
         this.foregroundTracker = new ForegroundSubAgentTracker();
         this.taskManager.subscribeDone(taskNotificationQueue::offer);
+        this.worktreeManager = initWorktreeManager(projectRoot);
+        this.activeCwd = worktreeManager != null && worktreeManager.currentSession() != null
+            ? worktreeManager.currentSession().worktreePath() : null;
         this.subAgentServices = new SubAgentServices(
             agentCatalog, provider, config, projectRoot, options,
             permissionPipeline, hitlCoordinator, taskManager,
             taskNotificationQueue, foregroundTracker,
-            () -> sessionManager.getHistory());
+            () -> sessionManager.getHistory(),
+            worktreeManager);
+    }
+
+    private static WorktreeManager initWorktreeManager(Path projectRoot) {
+        try {
+            WorktreeManager mgr = new WorktreeManager(projectRoot);
+            Thread.startVirtualThread(() -> {
+                try {
+                    mgr.sweepStale(Instant.now().minus(24, ChronoUnit.HOURS));
+                } catch (Exception e) {
+                    System.err.println("WARN: Worktree sweepStale 失败: " + e.getMessage());
+                }
+            });
+            warnIfGitignoreMissingWorktreeEntries(projectRoot);
+            return mgr;
+        } catch (Exception e) {
+            System.err.println("WARN: Worktree 功能未启用: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private static void warnIfGitignoreMissingWorktreeEntries(Path projectRoot) {
+        Path gi = projectRoot.resolve(".gitignore");
+        if (!Files.isRegularFile(gi)) {
+            return;
+        }
+        try {
+            String text = Files.readString(gi);
+            if (!text.contains(".lavendercode/worktrees/")
+                || !text.contains(".lavendercode/worktree_session.json")) {
+                System.err.println("WARN: 建议在 .gitignore 中忽略 .lavendercode/worktrees/ 与 "
+                    + ".lavendercode/worktree_session.json（未自动修改）");
+            }
+        } catch (IOException ignored) {
+        }
     }
 
     private AgentCatalog initAgentCatalog() {
@@ -438,7 +486,10 @@ public class NetworkOrchestrator {
         List<ToolDefinition> toolDefs = ToolDescriptionEnhancer.enhance(
             modeManager.getToolDefinitions(options.toolSystemEnabled()));
 
-        var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3, contextManager);
+        var toolExec = activeCwd != null
+            ? batchExecutor.withToolContext(ToolContext.empty().withCwd(activeCwd))
+            : batchExecutor;
+        var loop = new ReActLoop(provider, sessionManager, toolExec, tokenAccumulator, 10, 3, contextManager);
         loop.setConfig(config, toolDefs, stablePrompt, envInfo, modeManager);
         if (hookEngine != null) loop.setHookEngine(hookEngine);
         loop.setTaskNotificationQueue(taskNotificationQueue);

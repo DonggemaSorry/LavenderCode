@@ -42,14 +42,16 @@ public class ReadFileTool implements Tool {
 
     @Override
     public ToolResult execute(Map<String, Object> params) {
+        return execute(ToolContext.empty(), params);
+    }
+
+    @Override
+    public ToolResult execute(ToolContext ctx, Map<String, Object> params) {
         String pathStr = (String) params.get("path");
         if (pathStr == null || pathStr.isBlank()) {
             return ToolResult.error("INVALID_PARAMETER", "路径无效", "path is null or blank");
         }
-        Path path = Path.of(pathStr);
-        if (!path.isAbsolute()) {
-            path = Path.of("").toAbsolutePath().resolve(pathStr).normalize();
-        }
+        Path path = ctx.resolvePath(pathStr);
         if (!Files.exists(path)) {
             return ToolResult.error("FILE_NOT_FOUND", "文件不存在·" + pathStr, pathStr);
         }
