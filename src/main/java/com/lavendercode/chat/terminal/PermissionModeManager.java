@@ -18,6 +18,7 @@ public final class PermissionModeManager {
             case ACCEPT_EDITS -> PermissionMode.PLAN;
             case PLAN -> PermissionMode.BYPASS_PERMISSIONS;
             case BYPASS_PERMISSIONS -> PermissionMode.DEFAULT;
+            case DONT_ASK -> PermissionMode.DEFAULT;
         };
     }
 

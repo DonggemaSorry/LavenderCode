@@ -45,6 +45,11 @@ public final class ModeFallbackLayer implements PermissionLayer {
             ToolCategory.FILE_WRITE, new PermissionDecision.Allow(),
             ToolCategory.COMMAND, new PermissionDecision.Allow()));
 
+        matrix.put(PermissionMode.DONT_ASK, Map.of(
+            ToolCategory.READ_ONLY, new PermissionDecision.Allow(),
+            ToolCategory.FILE_WRITE, new PermissionDecision.Allow(),
+            ToolCategory.COMMAND, new PermissionDecision.Allow()));
+
         return matrix;
     }
 }
