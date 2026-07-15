@@ -84,6 +84,7 @@ public class NetworkOrchestrator {
     private final ForegroundSubAgentTracker foregroundTracker;
     private final SubAgentServices subAgentServices;
     final WorktreeManager worktreeManager;
+    final com.lavendercode.core.team.TeamManager teamManager;
     volatile Path activeCwd;
 
     public HookEngine hookEngine() { return hookEngine; }
@@ -214,6 +215,11 @@ public class NetworkOrchestrator {
         this.worktreeManager = initWorktreeManager(projectRoot);
         this.activeCwd = worktreeManager != null && worktreeManager.currentSession() != null
             ? worktreeManager.currentSession().worktreePath() : null;
+        this.teamManager = new com.lavendercode.core.team.TeamManager(
+            Path.of(System.getProperty("user.home")),
+            worktreeManager,
+            taskManager,
+            new com.lavendercode.core.task.AgentNameRegistry());
         this.subAgentServices = new SubAgentServices(
             agentCatalog, provider, config, projectRoot, options,
             permissionPipeline, hitlCoordinator, taskManager,
@@ -276,6 +282,11 @@ public class NetworkOrchestrator {
         this.worktreeManager = initWorktreeManager(projectRoot);
         this.activeCwd = worktreeManager != null && worktreeManager.currentSession() != null
             ? worktreeManager.currentSession().worktreePath() : null;
+        this.teamManager = new com.lavendercode.core.team.TeamManager(
+            Path.of(System.getProperty("user.home")),
+            worktreeManager,
+            taskManager,
+            new com.lavendercode.core.task.AgentNameRegistry());
         this.subAgentServices = new SubAgentServices(
             agentCatalog, provider, config, projectRoot, options,
             permissionPipeline, hitlCoordinator, taskManager,
@@ -329,11 +340,23 @@ public class NetworkOrchestrator {
 
     public void registerSubAgentTools() {
         if (options.toolSystemEnabled()) {
-            ToolRegistry.register(new AgentTool(subAgentServices));
+            ToolRegistry.register(new AgentTool(subAgentServices, teamManager));
             ToolRegistry.register(new TaskListTool(taskManager));
             ToolRegistry.register(new TaskGetTool(taskManager));
             ToolRegistry.register(new TaskStopTool(taskManager));
             ToolRegistry.register(new SendMessageTool(taskManager, subAgentServices));
+            ToolRegistry.register(new TeamCreateTool(teamManager));
+            ToolRegistry.register(new TeamDeleteTool(teamManager));
+            ToolRegistry.register(new TeamTaskCreateTool(teamManager));
+            ToolRegistry.register(new TeamTaskGetTool(teamManager));
+            ToolRegistry.register(new TeamTaskListTool(teamManager));
+            ToolRegistry.register(new TeamTaskUpdateTool(teamManager));
+            ToolRegistry.register(new TeamSendMessageTool(teamManager,
+                new DefaultTeammateResumeHandler(teamManager, subAgentServices)));
+            if (com.lavendercode.core.coordinator.Coordinator.isEnabled(options)) {
+                // Lead 白名单由运行时提示词 + 文档约束；工具仍全部注册，模型侧靠 SYSTEM_PROMPT
+                // 若存在 setAllowedTools API 可在此收窄；当前 TeamCreate/Delete 始终可用
+            }
         }
     }
 

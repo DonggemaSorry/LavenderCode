@@ -144,6 +144,11 @@ final class CommandContextImpl implements CommandContext {
     }
 
     @Override
+    public com.lavendercode.core.team.TeamManager teamManager() {
+        return orch.teamManager;
+    }
+
+    @Override
     public Path activeCwd() {
         return orch.activeCwd;
     }

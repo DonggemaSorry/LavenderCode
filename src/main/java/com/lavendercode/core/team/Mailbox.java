@@ -20,6 +20,8 @@ public final class Mailbox {
         .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
     private static final long STALE_MS = TimeUnit.SECONDS.toMillis(10);
     private static final int MAX_TRIES = 10;
+    private static final java.util.concurrent.ConcurrentHashMap<String, Object> JVM_LOCKS =
+        new java.util.concurrent.ConcurrentHashMap<>();
 
     private final Path root;
 
@@ -64,7 +66,6 @@ public final class Mailbox {
                     file.messages.set(idx, old.withRead(true));
                 }
             }
-            // also mark by matching unread batch: indices relative to full list
             writeFile(agentId, file);
             return null;
         });
@@ -86,32 +87,35 @@ public final class Mailbox {
     }
 
     private <T> T withLock(String agentId, IoSupplier<T> action) {
-        try {
-            Files.createDirectories(root);
-            Path lock = lockPath(agentId);
-            for (int attempt = 0; attempt < MAX_TRIES; attempt++) {
-                try {
-                    Files.newOutputStream(lock, StandardOpenOption.CREATE_NEW).close();
+        Object monitor = JVM_LOCKS.computeIfAbsent(agentId, k -> new Object());
+        synchronized (monitor) {
+            try {
+                Files.createDirectories(root);
+                Path lock = lockPath(agentId);
+                for (int attempt = 0; attempt < MAX_TRIES; attempt++) {
                     try {
-                        return action.get();
-                    } finally {
-                        Files.deleteIfExists(lock);
+                        Files.newOutputStream(lock, StandardOpenOption.CREATE_NEW).close();
+                        try {
+                            return action.get();
+                        } finally {
+                            Files.deleteIfExists(lock);
+                        }
+                    } catch (java.nio.file.FileAlreadyExistsException e) {
+                        if (isStale(lock)) {
+                            Files.deleteIfExists(lock);
+                            continue;
+                        }
+                        long sleep = 20 + ThreadLocalRandom.current().nextInt(80);
+                        Thread.sleep(sleep);
                     }
-                } catch (java.nio.file.FileAlreadyExistsException e) {
-                    if (isStale(lock)) {
-                        Files.deleteIfExists(lock);
-                        continue;
-                    }
-                    long sleep = 5 + ThreadLocalRandom.current().nextInt(96);
-                    Thread.sleep(sleep);
                 }
+                throw new IllegalStateException("邮箱锁获取失败: " + agentId);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("邮箱锁被中断", e);
+            } catch (IOException e) {
+                throw new IllegalStateException("邮箱写入失败: " + e.getMessage(), e);
             }
-            throw new IllegalStateException("邮箱锁获取失败: " + agentId);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("邮箱锁被中断", e);
-        } catch (IOException e) {
-            throw new IllegalStateException("邮箱写入失败: " + e.getMessage(), e);
         }
     }
 
