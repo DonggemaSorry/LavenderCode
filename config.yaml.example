@@ -19,3 +19,4 @@ options:
   read_file_max_lines: 2000
   command_output_max_chars: 30000
   search_max_results: 200
+  enable_sub_agent_background: true

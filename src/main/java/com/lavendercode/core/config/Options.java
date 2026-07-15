@@ -28,14 +28,17 @@ public record Options(
     int commandOutputMaxChars,
 
     @JsonProperty("search_max_results")
-    int searchMaxResults
+    int searchMaxResults,
+
+    @JsonProperty("enable_sub_agent_background")
+    Boolean enableSubAgentBackground
 ) {
     public Options() {
-        this(4096, "", true, false, 120, 30, 2000, 30000, 200);
+        this(4096, "", true, false, 120, 30, 2000, 30000, 200, true);
     }
 
     public Options(int maxTokens, String systemPrompt) {
-        this(maxTokens, systemPrompt, true, false, 120, 30, 2000, 30000, 200);
+        this(maxTokens, systemPrompt, true, false, 120, 30, 2000, 30000, 200, true);
     }
 
     public Options {
@@ -45,6 +48,9 @@ public record Options(
         if (toolSystemEnabled == null) {
             toolSystemEnabled = true;
         }
+        if (enableSubAgentBackground == null) {
+            enableSubAgentBackground = true;
+        }
     }
 
     /** Returns a copy with a different system prompt. */
@@ -52,6 +58,6 @@ public record Options(
         return new Options(maxTokens, newSystemPrompt, toolSystemEnabled,
             commandExecutionEnabled, commandTimeoutSeconds,
             fileOperationTimeoutSeconds, readFileMaxLines,
-            commandOutputMaxChars, searchMaxResults);
+            commandOutputMaxChars, searchMaxResults, enableSubAgentBackground);
     }
 }
