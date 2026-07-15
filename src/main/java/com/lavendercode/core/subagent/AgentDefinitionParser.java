@@ -48,15 +48,28 @@ public final class AgentDefinitionParser {
             int maxTurns = node.has("maxTurns") ? node.get("maxTurns").asInt() : AgentDefinition.DEFAULT_MAX_TURNS;
             PermissionMode permissionMode = resolvePermissionMode(text(node, "permissionMode"));
             boolean background = node.has("background") && node.get("background").asBoolean(false);
+            String isolation = resolveIsolation(text(node, "isolation"));
             String systemPrompt = body.strip();
             return new AgentDefinition(
                 name, description, tools, disallowedTools, model, maxTurns,
-                permissionMode, background, systemPrompt, source);
+                permissionMode, background, isolation, systemPrompt, source);
         } catch (ParseException e) {
             throw e;
         } catch (Exception e) {
             throw new ParseException("Failed to parse agent frontmatter: " + e.getMessage(), e);
         }
+    }
+
+    private static String resolveIsolation(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "";
+        }
+        String trimmed = raw.trim();
+        if ("worktree".equals(trimmed)) {
+            return "worktree";
+        }
+        System.err.println("WARN: unknown agent isolation '" + trimmed + "', fallback to empty");
+        return "";
     }
 
     private static String resolveModel(String raw) {

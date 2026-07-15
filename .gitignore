@@ -26,6 +26,10 @@ debug.log
 # Local permission overrides
 .lavendercode/permissions.local.yaml
 
+# Worktree isolation
+.lavendercode/worktrees/
+.lavendercode/worktree_session.json
+
 # Agent / IDE skill configs (local, not shared via repo)
 .claude/
 .cursor/

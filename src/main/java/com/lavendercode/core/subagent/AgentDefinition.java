@@ -12,6 +12,7 @@ public record AgentDefinition(
     int maxTurns,
     PermissionMode permissionMode,
     boolean forceBackground,
+    String isolation,
     String systemPrompt,
     AgentCatalog.Source source
 ) {
@@ -27,6 +28,7 @@ public record AgentDefinition(
             DEFAULT_MAX_TURNS,
             PermissionMode.DEFAULT,
             true,
+            "",
             boilerplateBody,
             AgentCatalog.Source.BUILTIN);
     }

@@ -26,7 +26,7 @@ class ToolFilterTest {
     @Test
     void definedAgentRemovesAgentTool() {
         var def = new AgentDefinition("explore", "d", List.of(), List.of("write_file"),
-            "inherit", 25, null, false, "body", AgentCatalog.Source.BUILTIN);
+            "inherit", 25, null, false, "", "body", AgentCatalog.Source.BUILTIN);
         Set<String> allowed = ToolFilter.filter(def, false, false);
         assertThat(allowed).contains("read_file").doesNotContain("Agent", "write_file");
     }

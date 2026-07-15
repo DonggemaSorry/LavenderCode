@@ -41,6 +41,11 @@ public class ExecuteCommandTool implements Tool {
 
     @Override
     public ToolResult execute(Map<String, Object> params) {
+        return execute(ToolContext.empty(), params);
+    }
+
+    @Override
+    public ToolResult execute(ToolContext ctx, Map<String, Object> params) {
         if (!enabled) {
             return ToolResult.error("COMMAND_DISABLED", "命令执行已禁用", "Command execution is disabled in configuration");
         }
@@ -51,7 +56,9 @@ public class ExecuteCommandTool implements Tool {
         }
 
         String workingDir = (String) params.get("working_dir");
-        File dir = workingDir != null ? new File(workingDir) : new File(System.getProperty("user.dir"));
+        File dir = workingDir != null
+            ? ctx.resolvePath(workingDir).toFile()
+            : ctx.resolvePath("").toFile();
 
         try {
             ProcessBuilder pb = new ProcessBuilder();

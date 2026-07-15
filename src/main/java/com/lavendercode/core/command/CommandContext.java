@@ -23,4 +23,8 @@ public interface CommandContext {
     void shutdown();
     void injectUserMessage(String text);
     String hookRules();
+
+    default com.lavendercode.core.worktree.WorktreeManager worktreeManager() { return null; }
+    default Path activeCwd() { return null; }
+    default void setActiveCwd(Path cwd) {}
 }

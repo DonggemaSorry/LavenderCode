@@ -36,7 +36,7 @@ class AgentToolConfigTest {
         var catalog = new AgentCatalog();
         catalog.register(new AgentDefinition(
             "explore", "d", java.util.List.of(), java.util.List.of(),
-            "inherit", 5, null, false, "body", AgentCatalog.Source.BUILTIN));
+            "inherit", 5, null, false, "", "body", AgentCatalog.Source.BUILTIN));
         Options opts = new Options(4096, "", true, false, 120, 30, 2000, 30000, 200, false);
         var services = new SubAgentServices(
             catalog, fastProvider(), null, java.nio.file.Path.of("."), opts,

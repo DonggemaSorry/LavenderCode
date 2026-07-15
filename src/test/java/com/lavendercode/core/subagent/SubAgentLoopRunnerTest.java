@@ -69,7 +69,7 @@ class SubAgentLoopRunnerTest {
             5);
         List<ToolDefinition> toolDefs = ToolFilter.filterDefinitions(
             new AgentDefinition("explore", "d", List.of("read_file"), List.of(),
-                "inherit", 5, null, false, "body", AgentCatalog.Source.BUILTIN),
+                "inherit", 5, null, false, "", "body", AgentCatalog.Source.BUILTIN),
             false, false);
         String result = runner.runToCompletion(
             session, toolDefs, "Find bugs in a.txt", new AtomicBoolean(false));

@@ -44,13 +44,18 @@ public class GrepTool implements Tool {
 
     @Override
     public ToolResult execute(Map<String, Object> params) {
+        return execute(ToolContext.empty(), params);
+    }
+
+    @Override
+    public ToolResult execute(ToolContext ctx, Map<String, Object> params) {
         String pattern = (String) params.get("pattern");
         if (pattern == null || pattern.isBlank()) {
             return ToolResult.error("INVALID_PARAMETER", "pattern 为空", "pattern is null or blank");
         }
 
         String dirStr = (String) params.get("directory");
-        Path dir = dirStr != null ? Path.of(dirStr) : Path.of(System.getProperty("user.dir"));
+        Path dir = dirStr != null ? ctx.resolvePath(dirStr) : ctx.resolvePath("");
 
         String filePattern = params.containsKey("file_pattern") ? (String) params.get("file_pattern") : "*";
         boolean caseSensitive = params.containsKey("case_sensitive") && Boolean.TRUE.equals(params.get("case_sensitive"));

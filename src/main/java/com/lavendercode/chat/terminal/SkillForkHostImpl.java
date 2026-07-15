@@ -51,6 +51,7 @@ final class SkillForkHostImpl implements SkillForkHost {
             AgentDefinition.DEFAULT_MAX_TURNS,
             PermissionMode.DEFAULT,
             false,
+            "",
             body,
             AgentCatalog.Source.BUILTIN);
         return SubAgentCallContext.run(SubAgentCallContext.Kind.FORK, () ->

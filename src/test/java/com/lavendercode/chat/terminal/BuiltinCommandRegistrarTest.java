@@ -8,9 +8,9 @@ import static org.assertj.core.api.Assertions.*;
 class BuiltinCommandRegistrarTest {
 
     @Test
-    void returnsThirteenCommandDefinitions() {
+    void returnsFourteenCommandDefinitions() {
         var defs = BuiltinCommandRegistrar.builtinCommands();
-        assertThat(defs).hasSize(13);
+        assertThat(defs).hasSize(14);
     }
 
     @Test
@@ -19,7 +19,7 @@ class BuiltinCommandRegistrarTest {
         var names = defs.stream().map(d -> d.metadata().name()).toList();
         assertThat(names).containsExactlyInAnyOrder(
             "clear", "compact", "do", "exit", "help", "hooks", "memory",
-            "permission", "plan", "resume", "review", "session", "status"
+            "permission", "plan", "resume", "review", "session", "status", "worktree"
         );
     }
 
@@ -49,14 +49,14 @@ class BuiltinCommandRegistrarTest {
     }
 
     @Test
-    void localCommandsAreStatusMemoryPermissionSessionHelp() {
+    void localCommandsAreStatusMemoryPermissionSessionHelpWorktree() {
         var defs = BuiltinCommandRegistrar.builtinCommands();
         var localNames = defs.stream()
             .filter(d -> d.metadata().kind() == CommandKind.LOCAL)
             .map(d -> d.metadata().name())
             .toList();
         assertThat(localNames).containsExactlyInAnyOrder(
-            "help", "hooks", "memory", "permission", "session", "status"
+            "help", "hooks", "memory", "permission", "session", "status", "worktree"
         );
     }
 
@@ -86,7 +86,7 @@ class BuiltinCommandRegistrarTest {
     void canConstructRegistryWithoutConflict() {
         var defs = BuiltinCommandRegistrar.builtinCommands();
         var registry = new CommandRegistry(defs);
-        assertThat(registry.visibleCommands()).hasSize(13);
+        assertThat(registry.visibleCommands()).hasSize(14);
     }
 
     @Test
@@ -97,5 +97,6 @@ class BuiltinCommandRegistrarTest {
         String help = BuiltinCommandRegistrar.formatHelp();
         assertThat(help).contains("/exit", "/clear", "/help", "/compact", "/plan", "/do");
         assertThat(help).contains("/memory", "/permission", "/resume", "/review", "/session", "/status");
+        assertThat(help).contains("/worktree");
     }
 }

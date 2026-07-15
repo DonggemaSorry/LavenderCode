@@ -49,7 +49,7 @@ class AgentToolForkTest {
         var catalog = new AgentCatalog();
         catalog.register(new AgentDefinition(
             "explore", "d", java.util.List.of(), java.util.List.of(),
-            "inherit", 5, null, false, "body", AgentCatalog.Source.BUILTIN));
+            "inherit", 5, null, false, "", "body", AgentCatalog.Source.BUILTIN));
         TaskManager mgr = new TaskManager();
         var services = new SubAgentServices(
             catalog, blockingProvider(), null, PathHolder.ROOT, new Options(),

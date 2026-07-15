@@ -8,5 +8,9 @@ public interface Tool {
     ToolParameterSchema parameters();
     ToolResult execute(Map<String, Object> params);
 
+    default ToolResult execute(ToolContext ctx, Map<String, Object> params) {
+        return execute(params);
+    }
+
     default boolean isReadOnly() { return false; }
 }

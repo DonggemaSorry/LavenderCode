@@ -3,6 +3,7 @@ package com.lavendercode.core.tool;
 import com.lavendercode.core.subagent.*;
 import com.lavendercode.core.provider.Message;
 import com.lavendercode.core.task.TaskManager;
+import com.lavendercode.core.tool.ToolContext;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
@@ -112,10 +113,52 @@ public final class AgentTool implements Tool {
         }
 
         boolean forceBackground = fork || def.forceBackground() || runInBackground;
+        if ("worktree".equals(def.isolation())) {
+            forceBackground = false; // F23：隔离本期强制前台
+        }
         SubAgentCallContext.Kind kind = fork ? SubAgentCallContext.Kind.FORK : SubAgentCallContext.Kind.DEFINED;
 
-        return SubAgentCallContext.run(kind, () -> executeLaunch(
-            def, prompt, description, taskName, fork, forceBackground, seed));
+        boolean useWorktree = "worktree".equals(def.isolation());
+        final boolean bg = forceBackground;
+        return SubAgentCallContext.run(kind, () -> {
+            if (useWorktree) {
+                return executeWithWorktree(def, prompt, description, taskName, fork, seed);
+            }
+            return executeLaunch(def, prompt, description, taskName, fork, bg, seed);
+        });
+    }
+
+    private ToolResult executeWithWorktree(AgentDefinition def, String prompt, String description,
+                                           String taskName, boolean fork, List<Message> seed) {
+        var mgr = services.worktreeManager();
+        if (mgr == null) {
+            return ToolResult.error("WORKTREE_DISABLED", "Worktree 功能未启用", "");
+        }
+        String name = "agent-a" + String.format("%07x",
+            java.util.concurrent.ThreadLocalRandom.current().nextInt(0x10000000));
+        try {
+            var wt = mgr.create(name, "HEAD", false);
+            String notice = com.lavendercode.core.worktree.WorktreeNotice.build(
+                services.projectRoot(), wt.path());
+            String task = notice + "\n" + prompt;
+            ToolContext ctx = ToolContext.empty().withCwd(wt.path());
+            AtomicBoolean cancelFlag = new AtomicBoolean(false);
+            AtomicReference<List<Message>> conversationOut = new AtomicReference<>();
+            Callable<String> work = SubAgentLauncher.buildWork(
+                services, def, task, fork, false, seed, cancelFlag, conversationOut, ctx);
+            ToolResult result = runInlineWithAdopt(work, def, task, description, taskName,
+                cancelFlag, conversationOut);
+            var cleanup = mgr.autoCleanup(name);
+            if (cleanup.kept() && result.success()) {
+                String appended = (result.content() == null ? "" : result.content())
+                    + "\n[Worktree 保留在 " + cleanup.path() + ",分支 " + cleanup.branch() + "]";
+                return ToolResult.success(description, appended);
+            }
+            return result;
+        } catch (Exception e) {
+            return ToolResult.error("WORKTREE_ERROR",
+                e.getMessage() != null ? e.getMessage() : "Worktree 启动失败", "");
+        }
     }
 
     private ToolResult executeLaunch(AgentDefinition def, String prompt, String description,
