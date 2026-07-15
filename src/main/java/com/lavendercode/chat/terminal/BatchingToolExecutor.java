@@ -11,17 +11,17 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class BatchingToolExecutor {
     private final long defaultTimeoutSec;
     private final long commandTimeoutSec;
-    private final PermissionPipeline pipeline;
+    private final PermissionEvaluator pipeline;
     private final Path projectRoot;
     private final HookEngine hookEngine;
 
     public BatchingToolExecutor(long defaultTimeoutSec, long commandTimeoutSec,
-                                PermissionPipeline pipeline, Path projectRoot) {
+                                PermissionEvaluator pipeline, Path projectRoot) {
         this(defaultTimeoutSec, commandTimeoutSec, pipeline, projectRoot, null);
     }
 
     public BatchingToolExecutor(long defaultTimeoutSec, long commandTimeoutSec,
-                                PermissionPipeline pipeline, Path projectRoot,
+                                PermissionEvaluator pipeline, Path projectRoot,
                                 HookEngine hookEngine) {
         this.defaultTimeoutSec = defaultTimeoutSec;
         this.commandTimeoutSec = commandTimeoutSec;

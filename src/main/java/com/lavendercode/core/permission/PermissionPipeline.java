@@ -8,7 +8,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-public final class PermissionPipeline {
+public final class PermissionPipeline implements PermissionEvaluator {
 
     private final List<PermissionLayer> layers;
     private final HitlGate hitlGate;
@@ -46,6 +46,11 @@ public final class PermissionPipeline {
         return new PermissionPipeline(layers, hitlGate, projectRoot, ruleEngineRef, reloadLocalRules);
     }
 
+    public RuleEngineLayer ruleEngineLayer() {
+        return ruleEngineRef.get();
+    }
+
+    @Override
     public PermissionOutcome evaluate(ToolCallContext ctx, AtomicBoolean cancelFlag) {
         if (ctx.parseFailed()) {
             return PermissionOutcome.deny(new PermissionDecision.Deny(
