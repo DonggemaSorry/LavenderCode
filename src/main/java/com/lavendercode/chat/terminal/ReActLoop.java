@@ -8,6 +8,7 @@ import com.lavendercode.core.prompt.PromptContext;
 import com.lavendercode.core.hook.HookEngine;
 import com.lavendercode.core.hook.HookEvent;
 import com.lavendercode.core.hook.HookPayload;
+import com.lavendercode.chat.terminal.TaskNotificationQueue;
 import com.lavendercode.core.prompt.ReminderInjector;
 import com.lavendercode.core.provider.*;
 import com.lavendercode.core.tool.*;
@@ -34,8 +35,13 @@ public class ReActLoop {
     private String environmentInfo;
     private PermissionModeManager modeManager;
     private HookEngine hookEngine;
+    private TaskNotificationQueue taskNotificationQueue;
 
     public void setHookEngine(HookEngine hookEngine) { this.hookEngine = hookEngine; }
+
+    public void setTaskNotificationQueue(TaskNotificationQueue taskNotificationQueue) {
+        this.taskNotificationQueue = taskNotificationQueue;
+    }
 
     public ReActLoop(LlmProvider provider, SessionManager sessionManager,
                      BatchingToolExecutor batchExecutor, TokenAccumulator tokenAccumulator,
@@ -81,7 +87,8 @@ public class ReActLoop {
             if (stablePrompt != null) {
                 Optional<String> reminder = ReminderInjector.inject(
                     iteration, modeManager != null && modeManager.isPlanMode(),
-                    hookEngine != null ? hookEngine.reminderQueue() : null);
+                    hookEngine != null ? hookEngine.reminderQueue() : null,
+                    taskNotificationQueue);
                 promptCtx = new PromptContext(stablePrompt, environmentInfo,
                     reminder.map(List::of).orElse(List.of()));
             }
