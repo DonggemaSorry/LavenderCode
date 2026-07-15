@@ -203,25 +203,15 @@ public class TerminalChatApplication {
                 memoryIndexSupplier,
                 sessionHandle
             );
+        orchestrator.registerSubAgentTools();
         var defs = new java.util.ArrayList<>(BuiltinCommandRegistrar.builtinCommands());
         if (skillCatalog != null) {
             var existingNames = new java.util.HashSet<String>();
             for (var d : defs) existingNames.add(d.metadata().name());
-            for (var meta : skillCatalog.list()) {
-                if (existingNames.contains(meta.name())) continue;
-                String desc = (meta.description() != null ? meta.description() : meta.name()) + " [skill]";
-                final String skillName = meta.name();
-                defs.add(new com.lavendercode.core.command.CommandDefinition(
-                    new com.lavendercode.core.command.CommandMetadata(
-                        skillName, java.util.List.of(), desc,
-                        com.lavendercode.core.command.CommandKind.PROMPT, false),
-                    (ctx, args) -> {
-                        var skill = skillCatalog.getFull(skillName);
-                        if (skill == null || skill.promptBody() == null) return null;
-                        return com.lavendercode.core.skill.SkillExecutor
-                            .substituteArguments(skill.promptBody(), args);
-                    }));
-            }
+            var skillHost = new SkillHostImpl(orchestrator);
+            var skillForkHost = new SkillForkHostImpl(orchestrator, orchestrator.subAgentServices());
+            defs.addAll(SkillCommandWiring.buildSkillCommands(
+                skillCatalog, existingNames, skillHost, skillForkHost));
         }
         var registry = new com.lavendercode.core.command.CommandRegistry(defs);
         BuiltinCommandRegistrar.bindRegistry(registry);

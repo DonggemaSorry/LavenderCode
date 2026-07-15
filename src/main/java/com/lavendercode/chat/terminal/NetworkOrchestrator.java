@@ -24,7 +24,9 @@ import com.lavendercode.core.memory.MemoryService;
 import com.lavendercode.core.permission.*;
 import com.lavendercode.core.provider.Message;
 import com.lavendercode.core.provider.LlmProvider;
-import com.lavendercode.core.tool.ToolDefinition;
+import com.lavendercode.core.subagent.*;
+import com.lavendercode.core.task.TaskManager;
+import com.lavendercode.core.tool.*;
 import com.lavendercode.core.prompt.SystemPromptAssembler;
 import com.lavendercode.core.prompt.EnvironmentInfoCollector;
 import com.lavendercode.core.prompt.ToolDescriptionEnhancer;
@@ -72,7 +74,21 @@ public class NetworkOrchestrator {
     private final ReentrantLock sessionLock = new ReentrantLock();
     private HookEngineImpl hookEngine;
 
+    private final AgentCatalog agentCatalog;
+    private final TaskManager taskManager;
+    private final TaskNotificationQueue taskNotificationQueue;
+    private final ForegroundSubAgentTracker foregroundTracker;
+    private final SubAgentServices subAgentServices;
+
     public HookEngine hookEngine() { return hookEngine; }
+
+    public SubAgentServices subAgentServices() {
+        return subAgentServices;
+    }
+
+    public TaskNotificationQueue taskNotificationQueue() {
+        return taskNotificationQueue;
+    }
 
     volatile ReActLoop currentLoop;
     private volatile Thread loopThread;
@@ -184,6 +200,16 @@ public class NetworkOrchestrator {
         this.memoryIndexSupplier = memoryIndexSupplier != null ? memoryIndexSupplier : () -> "";
         this.memoryService = null;
         initHookEngine();
+        this.agentCatalog = initAgentCatalog();
+        this.taskManager = new TaskManager();
+        this.taskNotificationQueue = new TaskNotificationQueue();
+        this.foregroundTracker = new ForegroundSubAgentTracker();
+        this.taskManager.subscribeDone(taskNotificationQueue::offer);
+        this.subAgentServices = new SubAgentServices(
+            agentCatalog, provider, config, projectRoot, options,
+            permissionPipeline, hitlCoordinator, taskManager,
+            taskNotificationQueue, foregroundTracker,
+            () -> sessionManager.getHistory());
     }
 
     public NetworkOrchestrator(DeltaBuffer deltaBuffer,
@@ -232,6 +258,35 @@ public class NetworkOrchestrator {
             : new MemoryService(projectRoot, Path.of(System.getProperty("user.home")));
         this.memoryIndexSupplier = this.memoryService::currentIndex;
         initHookEngine();
+        this.agentCatalog = initAgentCatalog();
+        this.taskManager = new TaskManager();
+        this.taskNotificationQueue = new TaskNotificationQueue();
+        this.foregroundTracker = new ForegroundSubAgentTracker();
+        this.taskManager.subscribeDone(taskNotificationQueue::offer);
+        this.subAgentServices = new SubAgentServices(
+            agentCatalog, provider, config, projectRoot, options,
+            permissionPipeline, hitlCoordinator, taskManager,
+            taskNotificationQueue, foregroundTracker,
+            () -> sessionManager.getHistory());
+    }
+
+    private AgentCatalog initAgentCatalog() {
+        var catalog = new AgentCatalog();
+        catalog.loadBuiltinFromClasspath();
+        Path userAgents = Path.of(System.getProperty("user.home")).resolve(".lavendercode/agents");
+        catalog.loadFromDirectory(userAgents, AgentCatalog.Source.USER);
+        catalog.loadFromDirectory(projectRoot.resolve(".lavendercode/agents"), AgentCatalog.Source.PROJECT);
+        return catalog;
+    }
+
+    public void registerSubAgentTools() {
+        if (options.toolSystemEnabled()) {
+            ToolRegistry.register(new AgentTool(subAgentServices));
+            ToolRegistry.register(new TaskListTool(taskManager));
+            ToolRegistry.register(new TaskGetTool(taskManager));
+            ToolRegistry.register(new TaskStopTool(taskManager));
+            ToolRegistry.register(new SendMessageTool(taskManager, subAgentServices));
+        }
     }
 
     private void initHookEngine() {
@@ -312,11 +367,7 @@ public class NetworkOrchestrator {
                         safePut(new RenderEvent.StatusUpdate(modeManager.getMode().label(), modelName, "", tokens));
                     }
                     case InputEvent.HitlChoice hc -> hitlCoordinator.complete(hc.choice());
-                    case InputEvent.CancelAgent __ -> {
-                        if (currentLoop != null) {
-                            currentLoop.cancel();
-                        }
-                    }
+                    case InputEvent.CancelAgent __ -> handleCancelOrAdopt();
                     case InputEvent.ScrollEvent se -> {
                         RenderEvent scrollEvent = parseScrollEvent(se.command());
                         if (scrollEvent != null) {
@@ -338,6 +389,19 @@ public class NetworkOrchestrator {
                                    com.lavendercode.core.command.CommandContext context) {
         this.commandRegistry = registry;
         this.commandContext = context;
+    }
+
+    void handleCancelOrAdopt() {
+        if (subAgentServices.hasForegroundSubAgent()) {
+            String taskId = foregroundTracker.adoptToBackground(taskManager, "esc-adopted");
+            if (taskId != null) {
+                safePut(new RenderEvent.AddSystemMessage("[子 Agent 已切换后台: " + taskId + "]"));
+                return;
+            }
+        }
+        if (currentLoop != null) {
+            currentLoop.cancel();
+        }
     }
 
     void handleSendMessage(InputEvent.SendMessage msg) {
@@ -377,6 +441,7 @@ public class NetworkOrchestrator {
         var loop = new ReActLoop(provider, sessionManager, batchExecutor, tokenAccumulator, 10, 3, contextManager);
         loop.setConfig(config, toolDefs, stablePrompt, envInfo, modeManager);
         if (hookEngine != null) loop.setHookEngine(hookEngine);
+        loop.setTaskNotificationQueue(taskNotificationQueue);
         currentLoop = loop;
 
         startTimer();

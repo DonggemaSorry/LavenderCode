@@ -22,11 +22,15 @@ import com.lavendercode.core.memory.MemoryService;
 import com.lavendercode.core.prompt.InstructionLoader;
 import com.lavendercode.core.provider.LlmProvider;
 import com.lavendercode.core.provider.ProviderRegistry;
+import com.lavendercode.core.subagent.AgentCatalog;
+import com.lavendercode.core.subagent.SubAgentServices;
+import com.lavendercode.core.task.TaskManager;
 import com.lavendercode.core.tool.*;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 
 import java.nio.file.Path;
+import java.util.List;
 
 public class LavenderCode {
 
@@ -106,6 +110,24 @@ public class LavenderCode {
             if (opts.toolSystemEnabled()) {
                 ToolRegistry.register(new com.lavendercode.core.skill.InstallSkillTool(
                     skillCatalog, projectRoot.resolve(".lavendercode/skills"), () -> {}));
+
+                AgentCatalog agentCatalog = new AgentCatalog();
+                agentCatalog.loadBuiltinFromClasspath();
+                agentCatalog.loadFromDirectory(
+                    Path.of(System.getProperty("user.home")).resolve(".lavendercode/agents"),
+                    AgentCatalog.Source.USER);
+                agentCatalog.loadFromDirectory(
+                    projectRoot.resolve(".lavendercode/agents"),
+                    AgentCatalog.Source.PROJECT);
+                SubAgentServices stubServices = new SubAgentServices(
+                    agentCatalog, provider, config, projectRoot, opts,
+                    null, (req, flag) -> com.lavendercode.core.permission.HitlChoice.ALLOW_ONCE,
+                    new TaskManager(), null, null, () -> List.of());
+                ToolRegistry.register(new AgentTool(stubServices));
+                ToolRegistry.register(new TaskListTool(stubServices.taskManager()));
+                ToolRegistry.register(new TaskGetTool(stubServices.taskManager()));
+                ToolRegistry.register(new TaskStopTool(stubServices.taskManager()));
+                ToolRegistry.register(new SendMessageTool(stubServices.taskManager(), stubServices));
             }
 
             TerminalChatApplication app = new TerminalChatApplication(

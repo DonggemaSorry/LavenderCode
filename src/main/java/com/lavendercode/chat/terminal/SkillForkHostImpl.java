@@ -1,16 +1,25 @@
 package com.lavendercode.chat.terminal;
 
+import com.lavendercode.core.permission.PermissionMode;
 import com.lavendercode.core.provider.Message;
 import com.lavendercode.core.skill.SkillForkHost;
+import com.lavendercode.core.subagent.AgentCatalog;
+import com.lavendercode.core.subagent.AgentDefinition;
+import com.lavendercode.core.subagent.SubAgentCallContext;
+import com.lavendercode.core.subagent.SubAgentLauncher;
+import com.lavendercode.core.subagent.SubAgentServices;
 import com.lavendercode.core.tool.ToolRegistry;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 
 final class SkillForkHostImpl implements SkillForkHost {
     private final NetworkOrchestrator orch;
+    private final SubAgentServices subAgentServices;
 
-    SkillForkHostImpl(NetworkOrchestrator orch) {
+    SkillForkHostImpl(NetworkOrchestrator orch, SubAgentServices subAgentServices) {
         this.orch = orch;
+        this.subAgentServices = subAgentServices;
     }
 
     @Override
@@ -32,11 +41,21 @@ final class SkillForkHostImpl implements SkillForkHost {
     @Override
     public String runSubAgent(String body, List<Message> seed,
                                List<String> allowedTools, String model) {
-        // Phase 2 基础实现——使用当前 provider 跑一轮对话
-        // 完整实现需要创建子 Agent 循环，此处先返回占位文本
-        // 后续迭代中完善子 Agent 对话能力
         orch.safePut(new RenderEvent.AddSystemMessage("[fork 模式正在执行子 Agent...]"));
-        return "[Skill fork 结果]: " + body.substring(0, Math.min(100, body.length()));
+        AgentDefinition temp = new AgentDefinition(
+            "skill-fork-temp",
+            "skill fork",
+            allowedTools,
+            List.of(),
+            model != null ? model : "inherit",
+            AgentDefinition.DEFAULT_MAX_TURNS,
+            PermissionMode.DEFAULT,
+            false,
+            body,
+            AgentCatalog.Source.BUILTIN);
+        return SubAgentCallContext.run(SubAgentCallContext.Kind.FORK, () ->
+            SubAgentLauncher.runWithSeed(
+                subAgentServices, temp, seed, body, new AtomicBoolean(false)));
     }
 
     @Override
