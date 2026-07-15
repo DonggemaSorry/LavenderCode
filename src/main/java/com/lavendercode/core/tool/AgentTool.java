@@ -345,13 +345,23 @@ public final class AgentTool implements Tool {
             final AgentDefinition defFinal = def;
             final List<Message> seedFinal = seed;
             final String memberFinal = memberName;
+            final java.util.concurrent.atomic.AtomicReference<String> agentIdRef =
+                new java.util.concurrent.atomic.AtomicReference<>();
+            final java.util.concurrent.CountDownLatch idReady = new java.util.concurrent.CountDownLatch(1);
             Callable<String> inner = SubAgentLauncher.buildWork(
                 services, defFinal, taskPrompt, seedFinal != null, true,
                 seedFinal, cancelFlag, conversationOut, toolCtx);
             Callable<String> work = () -> {
+                idReady.await(10, java.util.concurrent.TimeUnit.SECONDS);
+                String aid = agentIdRef.get();
+                if (aid == null) {
+                    aid = "unknown";
+                }
                 com.lavendercode.core.team.TeammateContext.set(
                     new com.lavendercode.core.team.TeammateContext(
-                        team.sanitizedName(), memberFinal, "pending", false));
+                        team.sanitizedName(), memberFinal, aid, false));
+                com.lavendercode.core.team.IncomingMailHook.set(
+                    com.lavendercode.core.team.IncomingMailHook.forTeammate(team, aid));
                 try {
                     return inner.call();
                 } finally {
@@ -364,6 +374,8 @@ public final class AgentTool implements Tool {
                                 "agent finished work, available for new tasks"));
                     } catch (Exception ignored) {
                     } finally {
+                        com.lavendercode.core.team.IncomingMailHook.clear();
+                        com.lavendercode.core.team.PlanApprovalState.clear();
                         com.lavendercode.core.team.TeammateContext.clear();
                     }
                 }
@@ -374,11 +386,8 @@ public final class AgentTool implements Tool {
                 team.sanitizedName(), memberFinal, "", wt.path(), sessionPaths.sessionRoot(),
                 def.name(), "", prompt, planModeRequired, work));
             String agentId = spawnResult.agentId();
-            com.lavendercode.core.team.TeammateContext.set(
-                new com.lavendercode.core.team.TeammateContext(
-                    team.sanitizedName(), memberFinal, agentId, false));
-            // context for future tools in this thread only — clear after register
-            com.lavendercode.core.team.TeammateContext.clear();
+            agentIdRef.set(agentId);
+            idReady.countDown();
 
             teamManager.registry().register(memberFinal, agentId);
             team.addMember(new com.lavendercode.core.team.TeammateInfo(

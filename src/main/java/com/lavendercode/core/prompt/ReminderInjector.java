@@ -1,5 +1,6 @@
 package com.lavendercode.core.prompt;
 
+import com.lavendercode.chat.terminal.LeadMailQueue;
 import com.lavendercode.chat.terminal.TaskNotificationQueue;
 import com.lavendercode.core.hook.HookReminderQueue;
 import java.util.Optional;
@@ -30,6 +31,13 @@ public class ReminderInjector {
     public static Optional<String> inject(int round, boolean planMode,
                                           HookReminderQueue hookQueue,
                                           TaskNotificationQueue taskQueue) {
+        return inject(round, planMode, hookQueue, taskQueue, null);
+    }
+
+    public static Optional<String> inject(int round, boolean planMode,
+                                          HookReminderQueue hookQueue,
+                                          TaskNotificationQueue taskQueue,
+                                          LeadMailQueue leadMailQueue) {
         StringBuilder sb = new StringBuilder();
         if (planMode) {
             boolean firstRound = (round == 1);
@@ -45,6 +53,12 @@ public class ReminderInjector {
         }
         if (taskQueue != null) {
             for (String n : taskQueue.drain()) {
+                if (!sb.isEmpty()) sb.append('\n');
+                sb.append(n);
+            }
+        }
+        if (leadMailQueue != null) {
+            for (String n : leadMailQueue.drain()) {
                 if (!sb.isEmpty()) sb.append('\n');
                 sb.append(n);
             }

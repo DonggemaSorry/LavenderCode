@@ -69,7 +69,9 @@ public final class SubAgentLauncher {
             if (seed != null && !seed.isEmpty()) {
                 session.replaceHistory(seed);
             }
-            List<ToolDefinition> toolDefs = ToolFilter.filterDefinitions(def, fork, background);
+            var ctx = com.lavendercode.core.team.TeammateContext.get();
+            boolean teamCollab = ctx != null && !ctx.isLead();
+            List<ToolDefinition> toolDefs = ToolFilter.filterDefinitions(def, fork, background, teamCollab);
             var runner = services.createRunner(def, toolContext);
             String text = runner.runToCompletion(session, toolDefs, prompt, cancelFlag);
             if (conversationOut != null) {

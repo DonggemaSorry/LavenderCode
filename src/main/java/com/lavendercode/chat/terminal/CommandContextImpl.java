@@ -22,7 +22,7 @@ final class CommandContextImpl implements CommandContext {
         this.projectSessionsDir = projectSessionsDir;
     }
 
-    @Override public String currentModeLabel() { return orch.modeManager.getMode().label(); }
+    @Override public String currentModeLabel() { return orch.modeManager.displayLabel(); }
     @Override public int totalInputTokens() { return orch.tokenAccumulator.getTotalInput(); }
     @Override public int totalOutputTokens() { return orch.tokenAccumulator.getTotalOutput(); }
     @Override public int toolCount() { return orch.modeManager.getToolDefinitions(orch.options.toolSystemEnabled()).size(); }

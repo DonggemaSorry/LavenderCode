@@ -4,7 +4,6 @@ import com.lavendercode.core.team.MailMessage;
 import com.lavendercode.core.team.Mailbox;
 import com.lavendercode.core.team.Team;
 import com.lavendercode.core.team.TeamManager;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -13,8 +12,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 /**
- * 轮询各 Team 的 lead 邮箱，将未读转为 reminder 文本回调。
- * IDLE 自动续推由上层（若具备）订阅同一 callback。
+ * 轮询各 Team 的 lead 邮箱；未读转为 reminder，回调上层（入队 + 可选 IDLE 续推）。
  */
 public final class LeadMailWatcher implements AutoCloseable {
     private final TeamManager teamManager;
