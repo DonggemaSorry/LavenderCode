@@ -7,12 +7,24 @@ import java.util.List;
 
 public final class PermissionModeManager {
     private PermissionMode mode;
+    private boolean coordinatorMode;
 
     public PermissionModeManager(PermissionMode initial) {
         this.mode = initial;
     }
 
+    public void setCoordinatorMode(boolean coordinatorMode) {
+        this.coordinatorMode = coordinatorMode;
+    }
+
+    public boolean isCoordinatorMode() {
+        return coordinatorMode;
+    }
+
     public void cycleMode() {
+        if (coordinatorMode) {
+            return; // Coordinator 进程内不可切换解锁写权限
+        }
         mode = switch (mode) {
             case DEFAULT -> PermissionMode.ACCEPT_EDITS;
             case ACCEPT_EDITS -> PermissionMode.PLAN;
@@ -23,7 +35,9 @@ public final class PermissionModeManager {
     }
 
     public void enterPlanMode() {
-        mode = PermissionMode.PLAN;
+        if (!coordinatorMode) {
+            mode = PermissionMode.PLAN;
+        }
     }
 
     public void exitPlanToDefault() {
@@ -38,10 +52,23 @@ public final class PermissionModeManager {
         return mode;
     }
 
+    public String displayLabel() {
+        return coordinatorMode ? "COORDINATOR" : mode.label();
+    }
+
     public List<ToolDefinition> getToolDefinitions(boolean toolSystemEnabled) {
         if (!toolSystemEnabled) {
             return List.of();
         }
-        return isPlanMode() ? ToolRegistry.exportReadOnly() : ToolRegistry.export();
+        List<ToolDefinition> defs = isPlanMode()
+            ? ToolRegistry.exportReadOnly()
+            : ToolRegistry.export();
+        if (coordinatorMode) {
+            var allowed = new java.util.HashSet<>(com.lavendercode.core.coordinator.Coordinator.ALLOWED_TOOLS);
+            return defs.stream().filter(d -> allowed.contains(d.name())).toList();
+        }
+        // 主会话默认隐藏队员协作五件套（TeamCreate/Delete 保留）
+        var hide = new java.util.HashSet<>(com.lavendercode.core.subagent.ToolFilter.TEAM_COLLAB_TOOLS);
+        return defs.stream().filter(d -> !hide.contains(d.name())).toList();
     }
 }

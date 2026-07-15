@@ -33,8 +33,109 @@ public final class BuiltinCommandRegistrar {
             def("review",  List.of(),       "请求 AI 审查当前代码变更",  CommandKind.PROMPT, (ctx, args) -> { ctx.injectUserMessage(REVIEW_PROMPT); return null; }),
             def("session", List.of(),       "显示当前会话信息",         CommandKind.LOCAL,  (ctx, args) -> { ctx.printMessage(formatSession(ctx)); return null; }),
             def("status",  List.of(),       "显示系统状态信息",         CommandKind.LOCAL,  (ctx, args) -> { ctx.printMessage(formatStatus(ctx)); return null; }),
-            def("worktree", List.of(),     "管理 Git Worktree 隔离目录", CommandKind.LOCAL, BuiltinCommandRegistrar::handleWorktree)
+            def("worktree", List.of(),     "管理 Git Worktree 隔离目录", CommandKind.LOCAL, BuiltinCommandRegistrar::handleWorktree),
+            def("team", List.of(),         "管理 Agent Team", CommandKind.LOCAL, BuiltinCommandRegistrar::handleTeam)
         );
+    }
+
+    static String handleTeam(CommandContext ctx, String args) {
+        var mgr = ctx.teamManager();
+        if (mgr == null) {
+            ctx.printMessage("TeamManager 未启用");
+            return null;
+        }
+        String[] parts = args == null || args.isBlank() ? new String[0] : args.trim().split("\\s+");
+        if (parts.length == 0) {
+            ctx.printMessage("用法: /team list | info <name> | delete <name> [--force] | kill <member>");
+            return null;
+        }
+        try {
+            switch (parts[0]) {
+                case "list" -> {
+                    var list = mgr.list();
+                    if (list.isEmpty()) {
+                        ctx.printMessage("(无 Team)");
+                        return null;
+                    }
+                    StringBuilder sb = new StringBuilder();
+                    for (var t : list) {
+                        long active = t.membersView().stream()
+                            .filter(m -> !"lead".equals(m.name()) && m.isEffectivelyActive())
+                            .count();
+                        long total = t.membersView().stream().filter(m -> !"lead".equals(m.name())).count();
+                        sb.append(t.sanitizedName()).append("  ").append(t.backend().wireValue())
+                            .append("  ").append(total).append(" 成员  [")
+                            .append(active).append('/').append(total).append("] 活跃\n");
+                    }
+                    ctx.printMessage(sb.toString().stripTrailing());
+                }
+                case "info" -> {
+                    if (parts.length < 2) {
+                        ctx.printMessage("用法: /team info <name>");
+                        return null;
+                    }
+                    var t = mgr.get(parts[1]).orElse(null);
+                    if (t == null) {
+                        ctx.printMessage("未找到团队: " + parts[1]);
+                        return null;
+                    }
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("team: ").append(t.sanitizedName())
+                        .append("\nbackend: ").append(t.backend().wireValue())
+                        .append("\nconfig: ").append(t.configPath()).append('\n');
+                    for (var m : t.membersView()) {
+                        sb.append("- ").append(m.name())
+                            .append(" id=").append(m.agentId())
+                            .append(" active=").append(m.isActive())
+                            .append(" wt=").append(m.worktreePath()).append('\n');
+                    }
+                    ctx.printMessage(sb.toString().stripTrailing());
+                }
+                case "delete" -> {
+                    if (parts.length < 2) {
+                        ctx.printMessage("用法: /team delete <name> [--force]");
+                        return null;
+                    }
+                    boolean force = false;
+                    for (int i = 2; i < parts.length; i++) {
+                        if ("--force".equals(parts[i])) {
+                            force = true;
+                        }
+                    }
+                    mgr.delete(parts[1], force);
+                    ctx.printMessage("已删除团队: " + parts[1]);
+                }
+                case "kill" -> {
+                    if (parts.length < 2) {
+                        ctx.printMessage("用法: /team kill <member>");
+                        return null;
+                    }
+                    String member = parts[1];
+                    boolean found = false;
+                    for (var t : mgr.list()) {
+                        var m = t.findMember(member).orElse(null);
+                        if (m == null) {
+                            continue;
+                        }
+                        found = true;
+                        if (mgr.taskManager() != null) {
+                            mgr.taskManager().stop(m.agentId());
+                        }
+                        t.removeMember(member);
+                        mgr.registry().unregister(member);
+                        ctx.printMessage("已终止队员: " + member);
+                        break;
+                    }
+                    if (!found) {
+                        ctx.printMessage("未找到队员: " + member);
+                    }
+                }
+                default -> ctx.printMessage("未知子命令: " + parts[0]);
+            }
+        } catch (Exception e) {
+            ctx.printMessage("错误: " + e.getMessage());
+        }
+        return null;
     }
 
     static String handleWorktree(CommandContext ctx, String args) {

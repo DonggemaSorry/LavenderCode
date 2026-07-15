@@ -25,6 +25,7 @@ public interface CommandContext {
     String hookRules();
 
     default com.lavendercode.core.worktree.WorktreeManager worktreeManager() { return null; }
+    default com.lavendercode.core.team.TeamManager teamManager() { return null; }
     default Path activeCwd() { return null; }
     default void setActiveCwd(Path cwd) {}
 }

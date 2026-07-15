@@ -81,9 +81,12 @@ public class NetworkOrchestrator {
     private final AgentCatalog agentCatalog;
     private final TaskManager taskManager;
     private final TaskNotificationQueue taskNotificationQueue;
+    private final LeadMailQueue leadMailQueue = new LeadMailQueue();
+    private LeadMailWatcher leadMailWatcher;
     private final ForegroundSubAgentTracker foregroundTracker;
     private final SubAgentServices subAgentServices;
     final WorktreeManager worktreeManager;
+    final com.lavendercode.core.team.TeamManager teamManager;
     volatile Path activeCwd;
 
     public HookEngine hookEngine() { return hookEngine; }
@@ -214,6 +217,11 @@ public class NetworkOrchestrator {
         this.worktreeManager = initWorktreeManager(projectRoot);
         this.activeCwd = worktreeManager != null && worktreeManager.currentSession() != null
             ? worktreeManager.currentSession().worktreePath() : null;
+        this.teamManager = new com.lavendercode.core.team.TeamManager(
+            Path.of(System.getProperty("user.home")),
+            worktreeManager,
+            taskManager,
+            new com.lavendercode.core.task.AgentNameRegistry());
         this.subAgentServices = new SubAgentServices(
             agentCatalog, provider, config, projectRoot, options,
             permissionPipeline, hitlCoordinator, taskManager,
@@ -276,6 +284,11 @@ public class NetworkOrchestrator {
         this.worktreeManager = initWorktreeManager(projectRoot);
         this.activeCwd = worktreeManager != null && worktreeManager.currentSession() != null
             ? worktreeManager.currentSession().worktreePath() : null;
+        this.teamManager = new com.lavendercode.core.team.TeamManager(
+            Path.of(System.getProperty("user.home")),
+            worktreeManager,
+            taskManager,
+            new com.lavendercode.core.task.AgentNameRegistry());
         this.subAgentServices = new SubAgentServices(
             agentCatalog, provider, config, projectRoot, options,
             permissionPipeline, hitlCoordinator, taskManager,
@@ -329,12 +342,39 @@ public class NetworkOrchestrator {
 
     public void registerSubAgentTools() {
         if (options.toolSystemEnabled()) {
-            ToolRegistry.register(new AgentTool(subAgentServices));
+            ToolRegistry.register(new AgentTool(subAgentServices, teamManager));
             ToolRegistry.register(new TaskListTool(taskManager));
             ToolRegistry.register(new TaskGetTool(taskManager));
             ToolRegistry.register(new TaskStopTool(taskManager));
             ToolRegistry.register(new SendMessageTool(taskManager, subAgentServices));
+            ToolRegistry.register(new TeamCreateTool(teamManager));
+            ToolRegistry.register(new TeamDeleteTool(teamManager));
+            ToolRegistry.register(new TeamTaskCreateTool(teamManager));
+            ToolRegistry.register(new TeamTaskGetTool(teamManager));
+            ToolRegistry.register(new TeamTaskListTool(teamManager));
+            ToolRegistry.register(new TeamTaskUpdateTool(teamManager));
+            ToolRegistry.register(new TeamSendMessageTool(teamManager,
+                new DefaultTeammateResumeHandler(teamManager, subAgentServices)));
+            if (com.lavendercode.core.coordinator.Coordinator.isEnabled(options)) {
+                modeManager.setCoordinatorMode(true);
+            }
+            startLeadMailWatcher();
         }
+    }
+
+    private void startLeadMailWatcher() {
+        if (leadMailWatcher != null) {
+            return;
+        }
+        leadMailWatcher = new LeadMailWatcher(teamManager, reminder -> {
+            leadMailQueue.offer(reminder);
+            // IDLE：入队列后自动续推一轮；忙碌时由 ReminderInjector 下轮注入
+            if (currentLoop == null && !resuming) {
+                inputQueue.offer(new InputEvent.SendMessage(
+                    "[team-update] 有队员汇报，请根据 inbox 继续协调或回复。"));
+            }
+        });
+        leadMailWatcher.start();
     }
 
     private void initHookEngine() {
@@ -392,7 +432,7 @@ public class NetworkOrchestrator {
     }
 
     public void run() {
-        safePut(new RenderEvent.StatusUpdate(modeManager.getMode().label(), modelName, "", 0));
+        safePut(new RenderEvent.StatusUpdate(modeManager.displayLabel(), modelName, "", 0));
         dispatchHook(HookEvent.SessionStart, sessionPayload(HookEvent.SessionStart));
         try {
             while (true) {
@@ -412,7 +452,7 @@ public class NetworkOrchestrator {
                     case InputEvent.CyclePermissionMode __ -> {
                         modeManager.cycleMode();
                         int tokens = tokenAccumulator.getTotalInput() + tokenAccumulator.getTotalOutput();
-                        safePut(new RenderEvent.StatusUpdate(modeManager.getMode().label(), modelName, "", tokens));
+                        safePut(new RenderEvent.StatusUpdate(modeManager.displayLabel(), modelName, "", tokens));
                     }
                     case InputEvent.HitlChoice hc -> hitlCoordinator.complete(hc.choice());
                     case InputEvent.CancelAgent __ -> handleCancelOrAdopt();
@@ -480,8 +520,12 @@ public class NetworkOrchestrator {
         safePut(new RenderEvent.AddUserMessage(msg.text()));
         lastUserMessage = msg.text();
 
+        String systemPrompt = options.systemPrompt();
+        if (modeManager.isCoordinatorMode()) {
+            systemPrompt = systemPrompt + com.lavendercode.core.coordinator.Coordinator.SYSTEM_PROMPT_SUFFIX;
+        }
         String stablePrompt = SystemPromptAssembler.assemble(
-            options.systemPrompt(), fileInstructions, currentMemoryIndex());
+            systemPrompt, fileInstructions, currentMemoryIndex());
         String envInfo = EnvironmentInfoCollector.collect(modelName, APP_VERSION);
         List<ToolDefinition> toolDefs = ToolDescriptionEnhancer.enhance(
             modeManager.getToolDefinitions(options.toolSystemEnabled()));
@@ -493,6 +537,7 @@ public class NetworkOrchestrator {
         loop.setConfig(config, toolDefs, stablePrompt, envInfo, modeManager);
         if (hookEngine != null) loop.setHookEngine(hookEngine);
         loop.setTaskNotificationQueue(taskNotificationQueue);
+        loop.setLeadMailQueue(leadMailQueue);
         currentLoop = loop;
 
         startTimer();
@@ -515,7 +560,7 @@ public class NetworkOrchestrator {
                 if (!timerScheduler.isShutdown()) {
                     int finalTokens = tokenAccumulator.getTotalInput() + tokenAccumulator.getTotalOutput();
                     timerScheduler.schedule(() -> safePut(
-                        new RenderEvent.StatusUpdate(modeManager.getMode().label(), modelName, "", finalTokens)),
+                        new RenderEvent.StatusUpdate(modeManager.displayLabel(), modelName, "", finalTokens)),
                         1, TimeUnit.SECONDS);
                 }
             }
@@ -526,7 +571,7 @@ public class NetworkOrchestrator {
     private void onAgentEvent(AgentEvent event) {
         switch (event) {
             case AgentEvent.RoundStart rs ->
-                safePut(new RenderEvent.StatusUpdate(modeManager.getMode().label(), modelName,
+                safePut(new RenderEvent.StatusUpdate(modeManager.displayLabel(), modelName,
                     "Round " + rs.round() + " …",
                     tokenAccumulator.getTotalInput() + tokenAccumulator.getTotalOutput()));
             case AgentEvent.Content c ->
@@ -547,7 +592,7 @@ public class NetworkOrchestrator {
                     trr.result().content() != null ? trr.result().content().length() : 0));
             case AgentEvent.Usage u ->
                 safePut(new RenderEvent.StatusUpdate(
-                    modeManager.getMode().label(), modelName, null,
+                    modeManager.displayLabel(), modelName, null,
                     u.inputTokens() + u.outputTokens()));
             case AgentEvent.RoundEnd re -> { /* no-op */ }
             case AgentEvent.Complete c -> {
@@ -560,7 +605,7 @@ public class NetworkOrchestrator {
                 long seconds = currentTimer != null ? currentTimer.elapsedSeconds() : 0;
                 int finalTokens = tokenAccumulator.getTotalInput() + tokenAccumulator.getTotalOutput();
                 safePut(new RenderEvent.StatusUpdate(
-                    modeManager.getMode().label(), modelName, "Done (" + seconds + "s)", finalTokens));
+                    modeManager.displayLabel(), modelName, "Done (" + seconds + "s)", finalTokens));
                 safePut(new RenderEvent.FinalizeMessage());
             }
             case AgentEvent.Stopped s -> {
@@ -720,6 +765,10 @@ public class NetworkOrchestrator {
     }
 
     void handleShutdown() {
+        if (leadMailWatcher != null) {
+            leadMailWatcher.close();
+            leadMailWatcher = null;
+        }
         dispatchHook(HookEvent.SessionEnd, sessionPayload(HookEvent.SessionEnd));
         if (currentLoop != null) {
             currentLoop.cancel();
@@ -752,7 +801,7 @@ public class NetworkOrchestrator {
             this.timerTask = timerScheduler.scheduleAtFixedRate(() -> {
                 int tokens = tokenAccumulator.getTotalInput() + tokenAccumulator.getTotalOutput();
                 safePut(new RenderEvent.StatusUpdate(
-                    modeManager.getMode().label(), modelName,
+                    modeManager.displayLabel(), modelName,
                     "Imagining\u2026 (" + timer.elapsedSeconds() + "s)", tokens));
             }, 1, 1, TimeUnit.SECONDS);
         } catch (RejectedExecutionException ignored) {

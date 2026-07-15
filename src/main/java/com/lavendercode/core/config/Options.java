@@ -31,14 +31,37 @@ public record Options(
     int searchMaxResults,
 
     @JsonProperty("enable_sub_agent_background")
-    Boolean enableSubAgentBackground
+    Boolean enableSubAgentBackground,
+
+    @JsonProperty("coordinator_mode")
+    Boolean coordinatorMode,
+
+    @JsonProperty("fork_teammate")
+    Boolean forkTeammate
 ) {
     public Options() {
-        this(4096, "", true, false, 120, 30, 2000, 30000, 200, true);
+        this(4096, "", true, false, 120, 30, 2000, 30000, 200, true, false, false);
     }
 
     public Options(int maxTokens, String systemPrompt) {
-        this(maxTokens, systemPrompt, true, false, 120, 30, 2000, 30000, 200, true);
+        this(maxTokens, systemPrompt, true, false, 120, 30, 2000, 30000, 200, true, false, false);
+    }
+
+    /** 兼容旧 10 参构造。 */
+    public Options(
+            int maxTokens,
+            String systemPrompt,
+            Boolean toolSystemEnabled,
+            boolean commandExecutionEnabled,
+            int commandTimeoutSeconds,
+            int fileOperationTimeoutSeconds,
+            int readFileMaxLines,
+            int commandOutputMaxChars,
+            int searchMaxResults,
+            Boolean enableSubAgentBackground) {
+        this(maxTokens, systemPrompt, toolSystemEnabled, commandExecutionEnabled,
+            commandTimeoutSeconds, fileOperationTimeoutSeconds, readFileMaxLines,
+            commandOutputMaxChars, searchMaxResults, enableSubAgentBackground, false, false);
     }
 
     public Options {
@@ -51,13 +74,27 @@ public record Options(
         if (enableSubAgentBackground == null) {
             enableSubAgentBackground = true;
         }
+        if (coordinatorMode == null) {
+            coordinatorMode = false;
+        }
+        if (forkTeammate == null) {
+            forkTeammate = false;
+        }
     }
 
-    /** Returns a copy with a different system prompt. */
     public Options withSystemPrompt(String newSystemPrompt) {
         return new Options(maxTokens, newSystemPrompt, toolSystemEnabled,
             commandExecutionEnabled, commandTimeoutSeconds,
             fileOperationTimeoutSeconds, readFileMaxLines,
-            commandOutputMaxChars, searchMaxResults, enableSubAgentBackground);
+            commandOutputMaxChars, searchMaxResults, enableSubAgentBackground,
+            coordinatorMode, forkTeammate);
+    }
+
+    public Options withCoordinatorMode(boolean enabled) {
+        return new Options(maxTokens, systemPrompt, toolSystemEnabled,
+            commandExecutionEnabled, commandTimeoutSeconds,
+            fileOperationTimeoutSeconds, readFileMaxLines,
+            commandOutputMaxChars, searchMaxResults, enableSubAgentBackground,
+            enabled, forkTeammate);
     }
 }

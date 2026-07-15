@@ -36,11 +36,16 @@ public class ReActLoop {
     private PermissionModeManager modeManager;
     private HookEngine hookEngine;
     private TaskNotificationQueue taskNotificationQueue;
+    private LeadMailQueue leadMailQueue;
 
     public void setHookEngine(HookEngine hookEngine) { this.hookEngine = hookEngine; }
 
     public void setTaskNotificationQueue(TaskNotificationQueue taskNotificationQueue) {
         this.taskNotificationQueue = taskNotificationQueue;
+    }
+
+    public void setLeadMailQueue(LeadMailQueue leadMailQueue) {
+        this.leadMailQueue = leadMailQueue;
     }
 
     public ReActLoop(LlmProvider provider, SessionManager sessionManager,
@@ -88,7 +93,7 @@ public class ReActLoop {
                 Optional<String> reminder = ReminderInjector.inject(
                     iteration, modeManager != null && modeManager.isPlanMode(),
                     hookEngine != null ? hookEngine.reminderQueue() : null,
-                    taskNotificationQueue);
+                    taskNotificationQueue, leadMailQueue);
                 promptCtx = new PromptContext(stablePrompt, environmentInfo,
                     reminder.map(List::of).orElse(List.of()));
             }
