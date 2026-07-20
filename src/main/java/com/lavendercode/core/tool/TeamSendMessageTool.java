@@ -1,5 +1,6 @@
 package com.lavendercode.core.tool;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lavendercode.core.team.Backend;
 import com.lavendercode.core.team.BackendFactory;
 import com.lavendercode.core.team.BackendType;
@@ -13,10 +14,13 @@ import com.lavendercode.core.team.TeammateResumeHandler;
 import com.lavendercode.core.task.BackgroundTask;
 import com.lavendercode.core.task.TaskManager;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 public final class TeamSendMessageTool implements Tool {
+    private static final ObjectMapper JSON = new ObjectMapper();
+
     private final TeamManager teamManager;
     private final TeammateResumeHandler resumeHandler;
 
@@ -61,12 +65,15 @@ public final class TeamSendMessageTool implements Tool {
         }
         try {
             TeammateContext ctx = TeammateContext.get();
-            String teamName = str(params, "teamName");
-            if (teamName == null || teamName.isBlank()) {
+            String rawTeamName = str(params, "teamName");
+            final String teamName;
+            if (rawTeamName == null || rawTeamName.isBlank()) {
                 if (ctx == null) {
                     return ToolResult.error("VALIDATION", "缺少 team 上下文或 teamName", "");
                 }
                 teamName = ctx.teamName();
+            } else {
+                teamName = rawTeamName;
             }
             Team team = teamManager.get(teamName)
                 .orElseThrow(() -> new IllegalArgumentException("团队不存在: " + teamName));
@@ -103,45 +110,49 @@ public final class TeamSendMessageTool implements Tool {
                     if (m.name().equals(from)) {
                         continue;
                     }
+                    TeammateInfo target = ensureAwake(team, m, body);
                     MailMessage copy = new MailMessage(
-                        from, m.agentId(), type, summary, body, payload, ts, false);
-                    mailbox.write(m.agentId(), copy);
-                    delivered.add(m.agentId());
-                    maybeWakeOrResume(team, m, body);
+                        from, target.agentId(), type, summary, body, payload, ts, false);
+                    mailbox.write(target.agentId(), copy);
+                    delivered.add(target.agentId());
                 }
             } else {
                 TeammateInfo member = resolveMember(team, to);
                 if ("shutdown_response".equals(type) && !"lead".equals(member.name())) {
                     return ToolResult.error("VALIDATION", "shutdown_response 只能发给 Lead", "");
                 }
+                TeammateInfo target = ensureAwake(team, member, body);
                 MailMessage copy = new MailMessage(
-                    from, member.agentId(), type, summary, body, payload, ts, false);
-                mailbox.write(member.agentId(), copy);
-                delivered.add(member.agentId());
-                maybeWakeOrResume(team, member, body);
+                    from, target.agentId(), type, summary, body, payload, ts, false);
+                mailbox.write(target.agentId(), copy);
+                delivered.add(target.agentId());
             }
 
-            return ToolResult.success("delivered",
-                "{\"deliveredTo\":" + toJsonArray(delivered) + ",\"timestamp\":" + ts + "}");
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("deliveredTo", delivered);
+            result.put("timestamp", ts);
+            return ToolResult.success("delivered", JSON.writeValueAsString(result));
         } catch (Exception e) {
             return ToolResult.error("TEAM_SEND", e.getMessage(), "");
         }
     }
 
     private TeammateInfo resolveMember(Team team, String to) {
-        return teamManager.registry().resolve(to)
-            .flatMap(id -> team.membersView().stream()
-                .filter(m -> m.agentId().equals(id) || m.name().equals(to))
-                .findFirst())
-            .or(() -> team.findMember(to))
+        // 优先本 Team 内按名/id 解析，避免全局 registry 跨 Team 误匹配
+        return team.findMember(to)
             .or(() -> team.membersView().stream()
                 .filter(m -> m.agentId().equals(to)).findFirst())
+            .or(() -> teamManager.registry().resolve(to)
+                .flatMap(id -> team.membersView().stream()
+                    .filter(m -> m.agentId().equals(id))
+                    .findFirst()))
             .orElseThrow(() -> new IllegalArgumentException("无法解析收件人: " + to));
     }
 
-    private void maybeWakeOrResume(Team team, TeammateInfo member, String message) throws Exception {
+    /** 若 in-process 队员已终止则先 resume，再返回最新 roster 成员（含新 agentId）。 */
+    private TeammateInfo ensureAwake(Team team, TeammateInfo member, String message) throws Exception {
         if ("lead".equals(member.name())) {
-            return;
+            return member;
         }
         if (member.backendType() == BackendType.IN_PROCESS) {
             TaskManager tm = teamManager.taskManager();
@@ -149,29 +160,20 @@ public final class TeamSendMessageTool implements Tool {
                 BackgroundTask t = tm.get(member.agentId());
                 if ((t == null || t.isTerminated()) && resumeHandler != null) {
                     resumeHandler.resumeIfStopped(team, member, message == null ? "" : message);
+                    return team.findMember(member.name()).orElse(member);
                 }
             }
-            return;
+            return member;
         }
         if (member.paneId() != null && !member.paneId().isBlank()) {
             try {
                 Backend backend = BackendFactory.create(member.backendType(), teamManager.taskManager());
                 backend.wake(member.paneId(), member.agentId());
-            } catch (Exception ignored) {
-                // 刀1 窗格后端未实现
+            } catch (Exception e) {
+                System.err.println("WARN: wake teammate failed: " + e.getMessage());
             }
         }
-    }
-
-    private static String toJsonArray(List<String> ids) {
-        StringBuilder sb = new StringBuilder("[");
-        for (int i = 0; i < ids.size(); i++) {
-            if (i > 0) {
-                sb.append(',');
-            }
-            sb.append('"').append(ids.get(i)).append('"');
-        }
-        return sb.append(']').toString();
+        return member;
     }
 
     private static String str(Map<String, Object> params, String key) {
