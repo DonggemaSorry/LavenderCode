@@ -1,11 +1,14 @@
 package com.lavendercode.core.tool;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lavendercode.core.team.Team;
 import com.lavendercode.core.team.TeamManager;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 public final class TeamCreateTool implements Tool {
+    private static final ObjectMapper JSON = new ObjectMapper();
     private final TeamManager teamManager;
 
     public TeamCreateTool(TeamManager teamManager) {
@@ -49,10 +52,11 @@ public final class TeamCreateTool implements Tool {
                 t.setDescription(desc);
                 t.saveAtomic();
             }
-            String json = "{\"teamName\":\"" + t.sanitizedName()
-                + "\",\"backend\":\"" + t.backend().wireValue()
-                + "\",\"configPath\":\"" + t.configPath().toString().replace("\\", "\\\\") + "\"}";
-            return ToolResult.success("team created", json);
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("teamName", t.sanitizedName());
+            payload.put("backend", t.backend().wireValue());
+            payload.put("configPath", t.configPath().toString());
+            return ToolResult.success("team created", JSON.writeValueAsString(payload));
         } catch (Exception e) {
             return ToolResult.error("TEAM_CREATE", e.getMessage(), "");
         }
