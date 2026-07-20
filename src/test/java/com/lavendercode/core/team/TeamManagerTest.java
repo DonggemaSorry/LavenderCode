@@ -4,8 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.lavendercode.core.task.AgentNameRegistry;
+import com.lavendercode.core.task.TaskManager;
+import com.lavendercode.core.task.TaskStatus;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -60,5 +65,35 @@ class TeamManagerTest {
         Team t = m.create("y", "");
         m.delete("y", true);
         assertThat(Files.exists(t.configDir())).isFalse();
+    }
+
+    @Test
+    void forceDeleteStopsMemberBackgroundTask() throws Exception {
+        System.setProperty("LAVENDERCODE_TEAM_BACKEND", "in-process");
+        TaskManager tm = new TaskManager();
+        TeamManager m = new TeamManager(home, null, tm, new AgentNameRegistry());
+        Team t = m.create("z", "");
+        AtomicBoolean cancelSeen = new AtomicBoolean(false);
+        CountDownLatch started = new CountDownLatch(1);
+        String[] idRef = new String[1];
+        idRef[0] = tm.launch(() -> {
+            started.countDown();
+            for (int i = 0; i < 100; i++) {
+                if (tm.get(idRef[0]).cancelFlag().get()) {
+                    cancelSeen.set(true);
+                    return "stopped";
+                }
+                Thread.sleep(20);
+            }
+            return "done";
+        }, "bob");
+        assertThat(started.await(2, TimeUnit.SECONDS)).isTrue();
+        t.addMember(new TeammateInfo(
+            "bob", idRef[0], "", "", home, "b",
+            BackendType.IN_PROCESS, "", true, false, home));
+        m.delete("z", true);
+        Thread.sleep(300);
+        assertThat(cancelSeen).isTrue();
+        assertThat(tm.get(idRef[0]).status()).isEqualTo(TaskStatus.CANCELLED);
     }
 }

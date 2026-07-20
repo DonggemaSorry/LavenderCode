@@ -153,6 +153,13 @@ public final class TeamManager {
                 if ("lead".equals(m.name())) {
                     continue;
                 }
+                if (taskManager != null && m.agentId() != null && !m.agentId().isBlank()) {
+                    try {
+                        taskManager.stop(m.agentId());
+                    } catch (Exception e) {
+                        System.err.println("停止队员任务警告: " + e.getMessage());
+                    }
+                }
                 cleanupMemberResources(m);
             }
             try {
