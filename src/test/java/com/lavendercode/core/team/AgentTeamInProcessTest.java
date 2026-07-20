@@ -13,7 +13,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class AgentTeamInProcessIT {
+class AgentTeamInProcessTest {
     @TempDir Path home;
 
     @AfterEach
@@ -51,7 +51,7 @@ class AgentTeamInProcessIT {
 
         Mailbox box = new Mailbox(team.configDir());
         box.write("lead", MailMessage.text("bob", "lead", "bob idle", "done"));
-        assertThat(box.readUnread("lead")).isNotEmpty();
+        assertThat(box.claimUnread("lead")).isNotEmpty();
 
         CountDownLatch done2 = new CountDownLatch(1);
         String id2 = tm.launch(() -> {
@@ -65,5 +65,18 @@ class AgentTeamInProcessIT {
         assertThat(Files.exists(marker2)).isTrue();
         assertThat(runs.get()).isEqualTo(2);
         assertThat(id2).isNotBlank();
+    }
+
+    @Test
+    void migrateUnreadMovesMessagesToNewAgentId() {
+        System.setProperty("LAVENDERCODE_TEAM_BACKEND", "in-process");
+        TeamManager mgr = new TeamManager(home, null, new TaskManager(), new AgentNameRegistry());
+        Team team = mgr.create("mig", "");
+        Mailbox box = new Mailbox(team.configDir());
+        box.write("old-id", MailMessage.text("lead", "old-id", "wake", "please continue"));
+        box.migrateUnread("old-id", "new-id");
+        assertThat(box.readUnread("old-id")).isEmpty();
+        assertThat(box.readUnread("new-id")).hasSize(1);
+        assertThat(box.readUnread("new-id").get(0).summary()).isEqualTo("wake");
     }
 }
