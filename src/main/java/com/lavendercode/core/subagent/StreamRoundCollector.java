@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 final class StreamRoundCollector {
+    private static final int MAX_TEXT_CHARS = 8_000_000;
     private final StringBuilder fullText = new StringBuilder();
     private final ToolCallAccumulator accumulator = new ToolCallAccumulator();
     private final List<ToolCall> completedCalls = new ArrayList<>();
@@ -18,7 +19,14 @@ final class StreamRoundCollector {
         while (iter.hasNext() && !cancelFlag.get()) {
             StreamEvent se = iter.next();
             switch (se) {
-                case StreamEvent.ContentDelta cd -> fullText.append(cd.text());
+                case StreamEvent.ContentDelta cd -> {
+                    fullText.append(cd.text());
+                    if (fullText.length() > MAX_TEXT_CHARS) {
+                        error = "stream text exceeded " + MAX_TEXT_CHARS + " chars";
+                        iter.close();
+                        return finish();
+                    }
+                }
                 case StreamEvent.ToolCallStart tcs -> accumulator.start(tcs.toolCallId(), tcs.toolName());
                 case StreamEvent.ToolCallDelta tcd -> accumulator.append(tcd.toolCallId(), tcd.jsonFragment());
                 case StreamEvent.ToolCallEnd tce -> {

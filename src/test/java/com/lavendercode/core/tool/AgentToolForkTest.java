@@ -45,14 +45,14 @@ class AgentToolForkTest {
     }
 
     @Test
-    void explicitBackgroundReturnsTaskId() {
+    void explicitBackgroundReturnsTaskId() throws Exception {
         var catalog = new AgentCatalog();
         catalog.register(new AgentDefinition(
             "explore", "d", java.util.List.of(), java.util.List.of(),
             "inherit", 5, null, false, "", "body", AgentCatalog.Source.BUILTIN));
         TaskManager mgr = new TaskManager();
         var services = new SubAgentServices(
-            catalog, blockingProvider(), null, PathHolder.ROOT, new Options(),
+            catalog, finiteProvider(), null, PathHolder.ROOT, new Options(),
             null, (req, f) -> com.lavendercode.core.permission.HitlChoice.ALLOW_ONCE,
             mgr, null, null, () -> java.util.List.of());
         var tool = new AgentTool(services);
@@ -64,6 +64,9 @@ class AgentToolForkTest {
         assertThat(r.success()).isTrue();
         assertThat(r.content()).contains("async_launched");
         assertThat(r.content()).contains("task_id");
+        String taskId = r.content().replaceAll("(?s).*\"task_id\"\\s*:\\s*\"([^\"]+)\".*", "$1");
+        mgr.stop(taskId);
+        Thread.sleep(100);
     }
 
     private static SubAgentServices minimalServices() {
@@ -72,7 +75,7 @@ class AgentToolForkTest {
             null, null, new TaskManager(), null, null, () -> java.util.List.of());
     }
 
-    private static com.lavendercode.core.provider.LlmProvider blockingProvider() {
+    private static com.lavendercode.core.provider.LlmProvider finiteProvider() {
         return new com.lavendercode.core.provider.LlmProvider() {
             @Override
             public String protocol() { return "test"; }
@@ -81,15 +84,14 @@ class AgentToolForkTest {
             public com.lavendercode.core.provider.StreamEventIterator streamChat(
                     java.util.List<com.lavendercode.core.provider.Message> history,
                     com.lavendercode.core.config.LlmConfig config) {
-                try {
-                    Thread.sleep(5000);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
                 return new com.lavendercode.core.provider.StreamEventIterator() {
-                    public boolean hasNext() { return true; }
+                    private int step;
+                    public boolean hasNext() { return step < 2; }
                     public com.lavendercode.core.provider.StreamEvent next() {
-                        return new com.lavendercode.core.provider.StreamEvent.ContentDelta("done");
+                        if (step++ == 0) {
+                            return new com.lavendercode.core.provider.StreamEvent.ContentDelta("done");
+                        }
+                        return new com.lavendercode.core.provider.StreamEvent.StreamComplete();
                     }
                     public void close() {}
                 };

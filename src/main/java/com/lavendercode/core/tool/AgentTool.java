@@ -189,7 +189,8 @@ public final class AgentTool implements Tool {
             if (services.taskManager() == null) {
                 return ToolResult.error("NO_TASK_MANAGER", "TaskManager 未配置", "");
             }
-            String taskId = services.taskManager().launch(work, taskName, seed, conversationOut);
+            String taskId = services.taskManager().launch(
+                work, taskName, seed, conversationOut, cancelFlag);
             return ToolResult.success(description,
                 "{\"task_id\":\"" + taskId + "\",\"status\":\"async_launched\"}");
         }

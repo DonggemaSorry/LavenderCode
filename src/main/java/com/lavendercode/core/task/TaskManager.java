@@ -27,8 +27,15 @@ public final class TaskManager {
     public String launch(Callable<String> work, String name,
                          List<com.lavendercode.core.provider.Message> conversation,
                          java.util.concurrent.atomic.AtomicReference<List<com.lavendercode.core.provider.Message>> conversationOut) {
+        return launch(work, name, conversation, conversationOut, null);
+    }
+
+    public String launch(Callable<String> work, String name,
+                         List<com.lavendercode.core.provider.Message> conversation,
+                         java.util.concurrent.atomic.AtomicReference<List<com.lavendercode.core.provider.Message>> conversationOut,
+                         AtomicBoolean cancelFlag) {
         String id = "task-" + seq.incrementAndGet();
-        AtomicBoolean cancel = new AtomicBoolean(false);
+        AtomicBoolean cancel = cancelFlag != null ? cancelFlag : new AtomicBoolean(false);
         Instant start = Instant.now();
         BackgroundTask initial = new BackgroundTask(
             id, name != null ? name : id, TaskStatus.RUNNING, start, null, null, null, cancel, conversation);
@@ -55,6 +62,18 @@ public final class TaskManager {
                 status = TaskStatus.FAILED;
                 error = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
             }
+        } catch (Error e) {
+            status = cancel.get() ? TaskStatus.CANCELLED : TaskStatus.FAILED;
+            error = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            List<com.lavendercode.core.provider.Message> finalConv = conversation;
+            if (conversationOut != null && conversationOut.get() != null) {
+                finalConv = conversationOut.get();
+            }
+            BackgroundTask done = new BackgroundTask(
+                id, name, status, start, Instant.now(), result, error, cancel, finalConv);
+            tasks.put(id, done);
+            notifyDone(done);
+            throw e;
         }
         List<com.lavendercode.core.provider.Message> finalConv = conversation;
         if (conversationOut != null && conversationOut.get() != null) {
