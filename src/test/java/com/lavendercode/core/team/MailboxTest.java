@@ -48,4 +48,43 @@ class MailboxTest {
         pool.shutdown();
         assertThat(box.readAll("a")).hasSize(n);
     }
+
+    @Test
+    void claimUnreadDoesNotLoseMessageWrittenDuringPoll() throws Exception {
+        Mailbox box = new Mailbox(dir);
+        box.write("a", MailMessage.text("lead", "a", "first", "1"));
+
+        var claimed = new java.util.concurrent.CopyOnWriteArrayList<MailMessage>();
+        CountDownLatch writerReady = new CountDownLatch(1);
+        CountDownLatch claimStarted = new CountDownLatch(1);
+
+        Thread claimer = new Thread(() -> {
+            // 自旋直到至少有一条可读，再与写入交错
+            claimStarted.countDown();
+            try {
+                writerReady.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            claimed.addAll(box.claimUnread("a"));
+        });
+        Thread writer = new Thread(() -> {
+            try {
+                claimStarted.await();
+                box.write("a", MailMessage.text("lead", "a", "second", "2"));
+                writerReady.countDown();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        claimer.start();
+        writer.start();
+        claimer.join();
+        writer.join();
+
+        List<MailMessage> remaining = box.readUnread("a");
+        int totalSeen = claimed.size() + remaining.size();
+        assertThat(totalSeen).isEqualTo(2);
+        assertThat(box.readAll("a")).hasSize(2);
+    }
 }

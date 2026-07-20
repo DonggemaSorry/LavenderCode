@@ -42,6 +42,17 @@ public final class Mailbox {
         });
     }
 
+    /** 将旧 agent 邮箱中的未读迁移到新 agent（resume 换 id 时用）。 */
+    public void migrateUnread(String fromAgentId, String toAgentId) {
+        if (fromAgentId == null || toAgentId == null || fromAgentId.equals(toAgentId)) {
+            return;
+        }
+        List<MailMessage> unread = claimUnread(fromAgentId);
+        for (MailMessage m : unread) {
+            write(toAgentId, m.withRead(false));
+        }
+    }
+
     public List<MailMessage> readUnread(String agentId) {
         MailFile file = readFileUnlocked(agentId);
         List<MailMessage> unread = new ArrayList<>();
@@ -51,6 +62,27 @@ public final class Mailbox {
             }
         }
         return unread;
+    }
+
+    /**
+     * 原子地取出当前未读并标为已读，避免 read → write → markAll 竞态丢消息。
+     */
+    public List<MailMessage> claimUnread(String agentId) {
+        return withLock(agentId, () -> {
+            MailFile file = readFile(agentId);
+            List<MailMessage> claimed = new ArrayList<>();
+            for (int i = 0; i < file.messages.size(); i++) {
+                MailMessage m = file.messages.get(i);
+                if (!m.read()) {
+                    claimed.add(m);
+                    file.messages.set(i, m.withRead(true));
+                }
+            }
+            if (!claimed.isEmpty()) {
+                writeFile(agentId, file);
+            }
+            return List.copyOf(claimed);
+        });
     }
 
     public List<MailMessage> readAll(String agentId) {
@@ -87,7 +119,8 @@ public final class Mailbox {
     }
 
     private <T> T withLock(String agentId, IoSupplier<T> action) {
-        Object monitor = JVM_LOCKS.computeIfAbsent(agentId, k -> new Object());
+        String lockKey = root.toAbsolutePath().normalize() + "/" + agentId;
+        Object monitor = JVM_LOCKS.computeIfAbsent(lockKey, k -> new Object());
         synchronized (monitor) {
             try {
                 Files.createDirectories(root);

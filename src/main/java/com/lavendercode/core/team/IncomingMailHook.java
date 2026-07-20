@@ -30,12 +30,11 @@ public final class IncomingMailHook {
     public static Supplier<Optional<String>> forTeammate(Team team, String agentId) {
         Mailbox mailbox = new Mailbox(team.configDir());
         return () -> {
-            List<MailMessage> unread = mailbox.readUnread(agentId);
+            List<MailMessage> unread = mailbox.claimUnread(agentId);
             if (unread.isEmpty()) {
                 return Optional.empty();
             }
             String formatted = IncomingMessageFormatter.format(unread);
-            mailbox.markAllUnreadAsRead(agentId);
             // Plan 审批副作用：收到 approve 时切 DEFAULT（via TeammateContext side channel）
             for (MailMessage m : unread) {
                 if ("plan_approval_response".equals(m.type()) && m.payload() instanceof java.util.Map<?, ?> map) {

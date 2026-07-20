@@ -41,7 +41,7 @@ public final class LeadMailWatcher implements AutoCloseable {
         try {
             for (Team team : teamManager.list()) {
                 Mailbox mailbox = new Mailbox(team.configDir());
-                List<MailMessage> unread = mailbox.readUnread("lead");
+                List<MailMessage> unread = mailbox.claimUnread("lead");
                 if (unread.isEmpty()) {
                     continue;
                 }
@@ -56,7 +56,6 @@ public final class LeadMailWatcher implements AutoCloseable {
                         .append('\n').append(content).append("\n---\n");
                 }
                 sb.append("</team-update>");
-                mailbox.markAllUnreadAsRead("lead");
                 if (reminderSink != null) {
                     reminderSink.accept(sb.toString());
                 }
