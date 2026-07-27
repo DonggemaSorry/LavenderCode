@@ -46,6 +46,22 @@ public class TerminalRenderer {
     private int completionSelectedIndex = 0;
     private boolean completionVisible = false;
 
+    private String currentDraft = "";
+    private int currentCursorIndex = 0;
+
+    /** Package-visible for tests — process one render event without blocking on the queue. */
+    void handle(RenderEvent event) {
+        dispatch(event);
+    }
+
+    String currentDraft() {
+        return currentDraft;
+    }
+
+    int currentCursorIndex() {
+        return currentCursorIndex;
+    }
+
     public TerminalRenderer(Terminal terminal, BlockingQueue<RenderEvent> renderQueue,
                             Theme theme, String providerName, String modelName,
                             InputAreaLayout inputLayout) {
@@ -185,11 +201,13 @@ public class TerminalRenderer {
                 drawFull();
             }
             case RenderEvent.RefreshInputChrome(var done) -> {
-                drawInputDraft("", 0);
+                redrawCurrentInputDraft();
                 if (done != null) done.countDown();
             }
             case RenderEvent.UpdateInputDraft(var draft, int cursor, var done) -> {
-                drawInputDraft(draft, cursor);
+                currentDraft = draft != null ? draft : "";
+                currentCursorIndex = Math.max(0, Math.min(cursor, currentDraft.length()));
+                redrawCurrentInputDraft();
                 if (done != null) done.countDown();
             }
             case RenderEvent.RefreshAll() -> drawFull();
@@ -198,7 +216,7 @@ public class TerminalRenderer {
                 completionSelectedIndex = selected;
                 completionVisible = visible;
                 drawViewport();
-                drawInputDraft("", 0);
+                redrawCurrentInputDraft();
             }
             case RenderEvent.CompletionEntry(var name, var description) -> {
                 // Completion entry rendering will be implemented in Task 12
@@ -216,8 +234,12 @@ public class TerminalRenderer {
         if (activePermissionPrompt != null) {
             drawPermissionPrompt();
         }
-        drawInputDraft("", 0);
+        redrawCurrentInputDraft();
         drawCompletionMenu();
+    }
+
+    private void redrawCurrentInputDraft() {
+        drawInputDraft(currentDraft, currentCursorIndex);
     }
 
     private void drawPermissionPrompt() {
