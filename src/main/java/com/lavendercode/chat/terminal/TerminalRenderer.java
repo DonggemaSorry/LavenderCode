@@ -58,6 +58,7 @@ public class TerminalRenderer {
     private ScrollRegionPainter scrollPainter;
     private ViewportHint viewportHint; // null = 全量视口重绘
     private long drawnRowCount;        // 包级可见语义见 drawnRowCount()
+    private long fullDrawCount;        // 包级可见语义见 fullDrawCount()
 
     /** Package-visible for tests — apply one event and paint one frame. */
     void handle(RenderEvent event) {
@@ -76,6 +77,10 @@ public class TerminalRenderer {
 
     long drawnRowCount() {
         return drawnRowCount;
+    }
+
+    long fullDrawCount() {
+        return fullDrawCount;
     }
 
     String currentDraft() {
@@ -178,7 +183,7 @@ public class TerminalRenderer {
                     currentAIBlock.markComplete();
                     currentAIBlock = null;
                     flatCacheDirty = true;
-                    dirtyAllRegions(); // Task 7 降级为 VIEWPORT
+                    dirtyViewportFull(); // 降级：弹窗/工具行覆盖于视口区域内，重绘视口即覆盖
                 }
             }
             case RenderEvent.AddUserMessage(var text) -> {
@@ -229,7 +234,7 @@ public class TerminalRenderer {
             case RenderEvent.PermissionPromptDismiss() -> {
                 activePermissionPrompt = null;
                 permissionPromptSelection = 0;
-                dirtyAllRegions(); // Task 7 降级为 VIEWPORT
+                dirtyViewportFull(); // 降级：弹窗覆盖于视口区域内，重绘视口即覆盖残留
             }
             case RenderEvent.ToolCallRender(var tcid, var tname, var params, var status) -> {
                 currentToolName = tname;
@@ -238,7 +243,7 @@ public class TerminalRenderer {
                 int tw = Math.max(1, terminal.getWidth() - 3);
                 currentAIBlock.appendToolRow(tname, paramsSummary, status, null, true, tw);
                 flatCacheDirty = true;
-                dirtyAllRegions(); // Task 7 降级为 VIEWPORT
+                dirtyViewportFull(); // 降级：工具行在视口内，重绘视口即可
             }
             case RenderEvent.ToolResultRender(var tcid, var summary, boolean ok, int len) -> {
                 ensureAIBlock();
@@ -246,7 +251,7 @@ public class TerminalRenderer {
                 int tw = Math.max(1, terminal.getWidth() - 3);
                 currentAIBlock.appendToolRow(toolName, null, "done", summary, ok, tw);
                 flatCacheDirty = true;
-                dirtyAllRegions(); // Task 7 降级为 VIEWPORT
+                dirtyViewportFull(); // 降级：工具结果行在视口内，重绘视口即可
             }
             case RenderEvent.RefreshInputChrome(var done) -> {
                 dirty.add(DirtyRegion.INPUT_AREA);
@@ -390,6 +395,7 @@ public class TerminalRenderer {
     // ===== drawing =====
 
     private void drawFull() {
+        fullDrawCount++;
         terminal.puts(InfoCmp.Capability.clear_screen);
         drawStatusBar();
         drawViewport();
