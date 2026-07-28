@@ -118,7 +118,7 @@ public class InputSystem {
     private String readEditedLine() throws IOException {
         StringBuilder buffer = new StringBuilder();
         int cursor = 0;
-        publishDraftSync(buffer.toString(), cursor);
+        publishDraft(buffer.toString(), cursor);
 
         while (true) {
             TerminalInput input = keyReader.readInput();
@@ -134,13 +134,13 @@ public class InputSystem {
                     case TerminalInput.Scroll(var cmd) when "up".equals(cmd) -> {
                         completionMenu.navigateUp();
                         renderQueue.offer(completionMenu.toRenderEvent());
-                        publishDraftSync(buffer.toString(), cursor);
+                        publishDraft(buffer.toString(), cursor);
                         continue;
                     }
                     case TerminalInput.Scroll(var cmd) when "down".equals(cmd) -> {
                         completionMenu.navigateDown();
                         renderQueue.offer(completionMenu.toRenderEvent());
-                        publishDraftSync(buffer.toString(), cursor);
+                        publishDraft(buffer.toString(), cursor);
                         continue;
                     }
                     case TerminalInput.Submit() -> {
@@ -155,7 +155,7 @@ public class InputSystem {
                     case TerminalInput.Escape() -> {
                         completionMenu.dismiss();
                         renderQueue.offer(completionMenu.toRenderEvent());
-                        publishDraftSync(buffer.toString(), cursor);
+                        publishDraft(buffer.toString(), cursor);
                         continue;
                     }
                     default -> { /* fall through to normal handling */ }
@@ -176,14 +176,14 @@ public class InputSystem {
                 case TerminalInput.Newline() -> {
                     buffer.insert(cursor, '\n');
                     cursor++;
-                    publishDraftSync(buffer.toString(), cursor);
+                    publishDraft(buffer.toString(), cursor);
                 }
                 case TerminalInput.Paste(var text) -> {
                     String normalized = normalizeNewlines(text);
                     if (!normalized.isEmpty()) {
                         buffer.insert(cursor, normalized);
                         cursor += normalized.length();
-                        publishDraftSync(buffer.toString(), cursor);
+                        publishDraft(buffer.toString(), cursor);
                     }
                 }
                 case TerminalInput.Exit() -> {
@@ -225,12 +225,12 @@ public class InputSystem {
                         if (cursor > 0) {
                             buffer.deleteCharAt(cursor - 1);
                             cursor--;
-                            publishDraftSync(buffer.toString(), cursor);
+                            publishDraft(buffer.toString(), cursor);
                         }
                     } else if (code >= 32) {
                         buffer.insert(cursor, (char) code);
                         cursor++;
-                        publishDraftSync(buffer.toString(), cursor);
+                        publishDraft(buffer.toString(), cursor);
                     }
                 }
                 default -> { /* ignore other specials during normal editing */ }
@@ -298,7 +298,7 @@ public class InputSystem {
         return text.replace("\r\n", "\n").replace("\r", "\n");
     }
 
-    private void publishDraftSync(String draft, int cursor) {
+    void publishDraftSync(String draft, int cursor) {
         if (shutdown.get()) {
             return;
         }
@@ -309,6 +309,18 @@ public class InputSystem {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    /**
+     * 打字路径异步发布草稿：offer 后立即返回，不等待渲染。
+     * 渲染线程 drain 机制保证连续 keystroke 只绘制最后一帧（最新值取胜）。
+     * Submit/Exit 等清屏路径仍用 publishDraftSync（确保提交前草稿已清屏）。
+     */
+    void publishDraft(String draft, int cursor) {
+        if (shutdown.get()) {
+            return;
+        }
+        renderQueue.offer(new RenderEvent.UpdateInputDraft(draft, cursor));
     }
 
     public void requestShutdown() {
