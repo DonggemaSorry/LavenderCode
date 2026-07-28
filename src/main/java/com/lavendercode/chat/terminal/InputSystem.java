@@ -237,8 +237,12 @@ public class InputSystem {
             }
 
             if (completionMenu != null) {
+                boolean wasActive = completionMenu.isActive();
                 completionMenu.onInputChanged(buffer.toString());
-                renderQueue.offer(completionMenu.toRenderEvent());
+                // 仅菜单活跃或刚隐藏时才发事件；普通打字不往渲染队列灌空事件
+                if (completionMenu.isActive() || wasActive) {
+                    renderQueue.offer(completionMenu.toRenderEvent());
+                }
             }
         }
     }

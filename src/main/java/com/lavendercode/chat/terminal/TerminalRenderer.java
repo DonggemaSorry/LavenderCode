@@ -265,10 +265,20 @@ public class TerminalRenderer {
             }
             case RenderEvent.RefreshAll() -> dirtyAllRegions();
             case RenderEvent.CompletionMenu(var entries, int selected, boolean visible) -> {
+                int oldHeight = completionVisible ? Math.min(8, completionEntries.size()) : 0;
+                boolean changed = visible != completionVisible
+                    || selected != completionSelectedIndex
+                    || !entries.equals(completionEntries);
                 completionEntries = entries;
                 completionSelectedIndex = selected;
                 completionVisible = visible;
-                dirtyViewportFull();
+                if (!changed) {
+                    break; // 打字路径每键都收到隐藏态空事件：零绘制，不得抵消异步化
+                }
+                int newHeight = visible ? Math.min(8, entries.size()) : 0;
+                if (newHeight < oldHeight) {
+                    dirtyViewportFull(); // 菜单隐藏/收缩：重绘视口擦除残留行
+                }
                 dirty.add(DirtyRegion.COMPLETION_MENU);
             }
             case RenderEvent.CompletionEntry(var name, var description) -> {
