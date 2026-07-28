@@ -55,6 +55,9 @@ public class TerminalRenderer {
     private final EnumSet<DirtyRegion> dirty = EnumSet.noneOf(DirtyRegion.class);
     private final List<CountDownLatch> frameLatches = new ArrayList<>();
     private long paintFrameCount;
+    private ScrollRegionPainter scrollPainter;
+    private ViewportHint viewportHint; // null = 全量视口重绘
+    private long drawnRowCount;        // 包级可见语义见 drawnRowCount()
 
     /** Package-visible for tests — apply one event and paint one frame. */
     void handle(RenderEvent event) {
@@ -64,6 +67,16 @@ public class TerminalRenderer {
 
     /** Package-visible for tests — number of paintFrame calls since construction. */
     long paintFrameCount() { return paintFrameCount; }
+
+    // ===== test observability (package-visible) =====
+
+    void setScrollPainter(ScrollRegionPainter painter) {
+        this.scrollPainter = painter;
+    }
+
+    long drawnRowCount() {
+        return drawnRowCount;
+    }
 
     String currentDraft() {
         return currentDraft;
@@ -83,6 +96,7 @@ public class TerminalRenderer {
         this.modeLabel = providerName != null ? providerName : "";
         this.modelName = modelName != null ? modelName : "";
         this.inputLayout = inputLayout;
+        this.scrollPainter = new ScrollRegionPainter(terminal);
         recalcLayout();
     }
 
@@ -271,7 +285,7 @@ public class TerminalRenderer {
                 drawFull();
             } else {
                 if (dirty.contains(DirtyRegion.STATUS_BAR)) drawStatusBar();
-                if (dirty.contains(DirtyRegion.VIEWPORT)) drawViewport();
+                if (dirty.contains(DirtyRegion.VIEWPORT)) paintViewport();
                 if (dirty.contains(DirtyRegion.PERMISSION_PROMPT) && activePermissionPrompt != null) {
                     drawPermissionPrompt();
                 }
@@ -280,10 +294,61 @@ public class TerminalRenderer {
             }
         } finally {
             dirty.clear();
+            viewportHint = null;
             for (var latch : frameLatches) {
                 latch.countDown();
             }
             frameLatches.clear();
+        }
+    }
+
+    /** VIEWPORT 分派：有提示走快路径，无提示或能力缺失降级 drawViewport。 */
+    private void paintViewport() {
+        switch (viewportHint) {
+            case ViewportHint.ScrollAppend(var scrolled, var firstDirty, var prevThumb)
+                    when scrollPainter.available() -> paintViewportScrollAppend(scrolled, firstDirty, prevThumb);
+            case ViewportHint.DiffRows(var row, var count, var prevThumb)
+                    -> paintViewportDiffRows(row, count, prevThumb);
+            case null, default -> drawViewport();
+        }
+    }
+
+    /** 滚动快路径：scrollUp 上移像素，只画底部新增行 + 滚动条 thumb 增量。 */
+    private void paintViewportScrollAppend(int scrolled, int firstDirty, int prevThumb) {
+        int firstScreenRow = STATUS_HEIGHT + (firstDirty - viewportStart);
+        if (scrolled >= viewportHeight || firstScreenRow < STATUS_HEIGHT || firstScreenRow >= separatorTopRow) {
+            drawViewport(); // F14 防御：越界降级，宁可重画不可画错
+            return;
+        }
+        int total = totalContentLines();
+        if (scrolled > 0) {
+            scrollPainter.scrollUp(STATUS_HEIGHT, separatorTopRow - 1, scrolled);
+            int residue = prevThumb - scrolled; // 旧 thumb 被硬件滚动后的残留位置
+            if (residue >= STATUS_HEIGHT && residue < separatorTopRow) {
+                drawScrollbarCell(residue, total);
+            }
+        }
+        drawDiff(firstScreenRow, separatorTopRow - firstScreenRow);
+        int thumb = scrollbarThumbRow(total);
+        if (thumb >= STATUS_HEIGHT && thumb < separatorTopRow) {
+            drawScrollbarCell(thumb, total);
+        }
+    }
+
+    /** 局部行快路径：clamp 到视口画受影响行（屏外自动跳过），再增量更新滚动条 thumb。 */
+    private void paintViewportDiffRows(int contentRow, int count, int prevThumb) {
+        int firstScreenRow = STATUS_HEIGHT + (contentRow - viewportStart);
+        int total = totalContentLines();
+        if (firstScreenRow < separatorTopRow) {
+            int from = Math.max(firstScreenRow, STATUS_HEIGHT);
+            drawDiff(from, Math.min(count, separatorTopRow - from));
+        }
+        if (prevThumb >= STATUS_HEIGHT && prevThumb < separatorTopRow) {
+            drawScrollbarCell(prevThumb, total);
+        }
+        int thumb = scrollbarThumbRow(total);
+        if (thumb >= STATUS_HEIGHT && thumb < separatorTopRow) {
+            drawScrollbarCell(thumb, total);
         }
     }
 
@@ -293,6 +358,33 @@ public class TerminalRenderer {
 
     private void dirtyViewportFull() {
         dirty.add(DirtyRegion.VIEWPORT);
+        viewportHint = null;
+    }
+
+    /** autoScroll 末尾追加置脏：与既有 ScrollAppend 合并，与其他变更混叠则降级全量。 */
+    private void markViewportScrollAppend(int scrolled, int firstDirty, int prevThumb) {
+        if (!dirty.contains(DirtyRegion.VIEWPORT)) {
+            dirty.add(DirtyRegion.VIEWPORT);
+            viewportHint = new ViewportHint.ScrollAppend(scrolled, firstDirty, prevThumb);
+        } else if (viewportHint instanceof ViewportHint.ScrollAppend(var s, var f, var p)) {
+            viewportHint = new ViewportHint.ScrollAppend(s + scrolled, Math.min(f, firstDirty), p);
+        } else {
+            viewportHint = null; // 与全量/DiffRows 混叠 → 保守全量
+        }
+    }
+
+    /** 局部行变化置脏（上翻中追加）：与既有 DiffRows 合并行范围，混叠则降级全量。 */
+    private void markViewportDiffRows(int contentRow, int count, int prevThumb) {
+        if (!dirty.contains(DirtyRegion.VIEWPORT)) {
+            dirty.add(DirtyRegion.VIEWPORT);
+            viewportHint = new ViewportHint.DiffRows(contentRow, count, prevThumb);
+        } else if (viewportHint instanceof ViewportHint.DiffRows(var r, var c, var p)) {
+            int from = Math.min(r, contentRow);
+            int to = Math.max(r + c, contentRow + count);
+            viewportHint = new ViewportHint.DiffRows(from, to - from, p);
+        } else {
+            viewportHint = null;
+        }
     }
 
     // ===== drawing =====
@@ -523,6 +615,7 @@ public class TerminalRenderer {
                 }
             }
             drawScrollbarCell(screenRow, totalLines);
+            drawnRowCount++;
         }
         terminal.flush();
         drawCompletionMenu();
@@ -549,6 +642,7 @@ public class TerminalRenderer {
                 }
             }
             drawScrollbarCell(row, totalLines);
+            drawnRowCount++;
         }
         terminal.flush();
     }
@@ -573,12 +667,16 @@ public class TerminalRenderer {
         }
     }
 
+    private int scrollbarThumbRow(int totalLines) {
+        double ratio = (double) viewportStart / Math.max(1, totalLines - viewportHeight);
+        return STATUS_HEIGHT + (int) (ratio * (viewportHeight - 1));
+    }
+
     private void drawScrollbarCell(int screenRow, int totalLines) {
         if (totalLines <= viewportHeight) return;
         int sbCol = terminal.getWidth() - 1;
         terminal.puts(InfoCmp.Capability.cursor_address, screenRow, sbCol);
-        double ratio = (double) viewportStart / Math.max(1, totalLines - viewportHeight);
-        int thumbRow = STATUS_HEIGHT + (int) (ratio * (viewportHeight - 1));
+        int thumbRow = scrollbarThumbRow(totalLines);
         if (screenRow == thumbRow) {
             terminal.writer().print(theme.apply(StyleCatalog.SCROLLBAR_THUMB, "\u2588").toAnsi(terminal));
         } else {
@@ -595,13 +693,21 @@ public class TerminalRenderer {
             flatCacheDirty = true;
         }
         int oldCount = currentAIBlock.lineCount();
+        int oldTotal = totalContentLines();
+        int oldViewportStart = viewportStart;
+        int prevThumb = scrollbarThumbRow(oldTotal);
         int aiWidth = Math.max(1, terminal.getWidth() - 3); // "│ " prefix(2) + scrollbar(1)
         currentAIBlock.append(text, aiWidth);
         appendLinesToFlatCache(currentAIBlock, oldCount);
         if (autoScroll) {
             scrollToBottom();
+            int scrolled = viewportStart - oldViewportStart;
+            int firstDirty = Math.max(0, oldTotal - 1); // 原末行可能被续写
+            markViewportScrollAppend(scrolled, firstDirty, prevThumb);
+        } else {
+            int added = totalContentLines() - oldTotal;
+            markViewportDiffRows(Math.max(0, oldTotal - 1), added + 1, prevThumb);
         }
-        dirtyViewportFull(); // Task 6 改为携带 ViewportHint
     }
 
     private void ensureAIBlock() {
@@ -639,13 +745,21 @@ public class TerminalRenderer {
             flatCacheDirty = true;
         }
         int oldCount = currentAIBlock.lineCount();
+        int oldTotal = totalContentLines();
+        int oldViewportStart = viewportStart;
+        int prevThumb = scrollbarThumbRow(oldTotal);
         int thinkWidth = Math.max(1, terminal.getWidth() - 5); // "│ " prefix(2) + indent(2) + scrollbar(1)
         currentAIBlock.appendThinking(text, thinkWidth);
         appendLinesToFlatCache(currentAIBlock, oldCount);
         if (autoScroll) {
             scrollToBottom();
+            int scrolled = viewportStart - oldViewportStart;
+            int firstDirty = Math.max(0, oldTotal - 1);
+            markViewportScrollAppend(scrolled, firstDirty, prevThumb);
+        } else {
+            int added = totalContentLines() - oldTotal;
+            markViewportDiffRows(Math.max(0, oldTotal - 1), added + 1, prevThumb);
         }
-        dirtyViewportFull();
     }
 
     private void addBlock(Role role, String text) {
