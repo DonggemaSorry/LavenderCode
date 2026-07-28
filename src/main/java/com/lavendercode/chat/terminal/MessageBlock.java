@@ -52,8 +52,7 @@ public class MessageBlock {
         ensureLastContentSegment();
         ContentSegment last = (ContentSegment) segments.get(segments.size() - 1);
         last.rawText.append(text);
-        last.lines.clear();
-        wrapAndColor(last.rawText.toString(), terminalWidth, last.lines);
+        rewrapFromStablePoint(last, terminalWidth);
         recalcLineCount();
         return lineCount() - oldCount;
     }
@@ -93,7 +92,10 @@ public class MessageBlock {
         for (Segment seg : segments) {
             seg.lines.clear();
             if (seg instanceof ContentSegment cs) {
-                wrapAndColor(cs.rawText.toString(), terminalWidth, cs.lines);
+                cs.stableRawLength = 0;
+                cs.partialStart = 0;
+                cs.inCodeBlockAtStable = inCodeBlock;
+                rewrapFromStablePoint(cs, terminalWidth);
             } else if (seg instanceof ThinkingSegment ts) {
                 wrapAsThinking(ts.rawText.toString(), terminalWidth, ts.lines);
             }
@@ -130,7 +132,9 @@ public class MessageBlock {
 
     private void ensureLastContentSegment() {
         if (segments.isEmpty() || !(segments.get(segments.size() - 1) instanceof ContentSegment)) {
-            segments.add(new ContentSegment());
+            ContentSegment cs = new ContentSegment();
+            cs.inCodeBlockAtStable = inCodeBlock; // 继承当前代码块状态，保证跨段围栏连续
+            segments.add(cs);
         }
     }
 
@@ -143,21 +147,30 @@ public class MessageBlock {
         return null;
     }
 
-    private void wrapAndColor(String raw, int width, List<RenderedLine> out) {
-        StringBuilder currentLine = new StringBuilder();
-        for (int i = 0; i < raw.length(); ) {
-            int cp = raw.codePointAt(i);
-            int charCount = Character.charCount(cp);
-            if (cp == '\n') {
-                flushLineToOutput(currentLine.toString(), width, out);
-                currentLine.setLength(0);
-            } else {
-                currentLine.appendCodePoint(cp);
+    /**
+     * 从稳定点增量重排：丢弃旧的未闭合尾行 → 恢复快照状态 →
+     * wrap 新闭合的行（含 ``` 围栏检测）→ 重 wrap 末尾未闭合行。
+     * 未闭合尾行不做围栏检测（等 \n 到达成为闭合行时才检测），
+     * 避免部分围栏文本（如 "```ja"）被重复计数。
+     */
+    private void rewrapFromStablePoint(ContentSegment seg, int width) {
+        seg.lines.subList(seg.partialStart, seg.lines.size()).clear();
+        inCodeBlock = seg.inCodeBlockAtStable;
+
+        String raw = seg.rawText.toString();
+        int lineStart = seg.stableRawLength;
+        for (int i = lineStart; i < raw.length(); i++) {
+            if (raw.charAt(i) == '\n') {
+                flushLineToOutput(raw.substring(lineStart, i), width, seg.lines);
+                lineStart = i + 1;
             }
-            i += charCount;
         }
-        if (currentLine.length() > 0) {
-            flushLineToOutput(currentLine.toString(), width, out);
+        seg.stableRawLength = lineStart;
+        seg.inCodeBlockAtStable = inCodeBlock;
+        seg.partialStart = seg.lines.size();
+
+        if (lineStart < raw.length()) {
+            wrapByDisplayWidth(raw.substring(lineStart), width, seg.lines, false);
         }
     }
 
@@ -331,6 +344,9 @@ public class MessageBlock {
 
     private static final class ContentSegment extends Segment {
         final StringBuilder rawText = new StringBuilder();
+        int stableRawLength;        // 最后一个已处理 '\n' 之后的位置
+        int partialStart;           // 未闭合尾行在 lines 中的起始下标
+        boolean inCodeBlockAtStable; // 稳定点处的代码块状态快照
     }
 
     private static final class ThinkingSegment extends Segment {
