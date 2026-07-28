@@ -118,10 +118,7 @@ public class TerminalRenderer {
 
         try {
             while (true) {
-                RenderEvent event = renderQueue.take();
-                if (event instanceof RenderEvent.Shutdown) break;
-                apply(event);
-                paintFrame();
+                if (processBatch() < 0) break;
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -133,6 +130,27 @@ public class TerminalRenderer {
     }
 
     // ===== apply: state changes + dirty marking (no drawing) =====
+
+    /**
+     * 帧合并主循环单元：take 阻塞取首个事件 → drainTo 排空队列 →
+     * 整批 apply → 统一 paintFrame 一次。
+     * 返回处理的事件数；批内遇到 Shutdown 时先绘制已应用的事件再返回 -1。
+     */
+    int processBatch() throws InterruptedException {
+        RenderEvent first = renderQueue.take();
+        List<RenderEvent> batch = new ArrayList<>();
+        batch.add(first);
+        renderQueue.drainTo(batch);
+        for (RenderEvent e : batch) {
+            if (e instanceof RenderEvent.Shutdown) {
+                paintFrame();
+                return -1;
+            }
+            apply(e);
+        }
+        paintFrame();
+        return batch.size();
+    }
 
     private void apply(RenderEvent event) {
         switch (event) {
