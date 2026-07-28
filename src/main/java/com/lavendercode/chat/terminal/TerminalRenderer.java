@@ -8,9 +8,11 @@ import org.jline.utils.InfoCmp;
 import org.jline.utils.Signals;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CountDownLatch;
 
 public class TerminalRenderer {
 
@@ -50,10 +52,18 @@ public class TerminalRenderer {
     private String currentDraft = "";
     private int currentCursorIndex = 0;
 
-    /** Package-visible for tests — process one render event without blocking on the queue. */
+    private final EnumSet<DirtyRegion> dirty = EnumSet.noneOf(DirtyRegion.class);
+    private final List<CountDownLatch> frameLatches = new ArrayList<>();
+    private long paintFrameCount;
+
+    /** Package-visible for tests — apply one event and paint one frame. */
     void handle(RenderEvent event) {
-        dispatch(event);
+        apply(event);
+        paintFrame();
     }
+
+    /** Package-visible for tests — number of paintFrame calls since construction. */
+    long paintFrameCount() { return paintFrameCount; }
 
     String currentDraft() {
         return currentDraft;
@@ -110,7 +120,8 @@ public class TerminalRenderer {
             while (true) {
                 RenderEvent event = renderQueue.take();
                 if (event instanceof RenderEvent.Shutdown) break;
-                dispatch(event);
+                apply(event);
+                paintFrame();
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -121,7 +132,9 @@ public class TerminalRenderer {
         }
     }
 
-    private void dispatch(RenderEvent event) {
+    // ===== apply: state changes + dirty marking (no drawing) =====
+
+    private void apply(RenderEvent event) {
         switch (event) {
             case RenderEvent.AppendToMessage(var text) -> appendToAIBlock(text);
             case RenderEvent.FinalizeMessage() -> {
@@ -133,7 +146,7 @@ public class TerminalRenderer {
                     currentAIBlock.markComplete();
                     currentAIBlock = null;
                     flatCacheDirty = true;
-                    drawFull();
+                    dirtyAllRegions(); // Task 7 降级为 VIEWPORT
                 }
             }
             case RenderEvent.AddUserMessage(var text) -> {
@@ -147,12 +160,12 @@ public class TerminalRenderer {
                 viewportStart = 0;
                 tokenCount = 0;
                 flatCacheDirty = true;
-                drawFull();
+                dirtyAllRegions();
             }
             case RenderEvent.ScrollTo(int n) -> {
                 viewportStart = clampValue(n);
                 autoScroll = false;
-                drawViewport();
+                dirtyViewportFull();
             }
             case RenderEvent.ScrollDelta(int d) -> scrollDelta(d);
             case RenderEvent.ScrollPageUp() -> scrollDelta(-viewportHeight);
@@ -160,12 +173,12 @@ public class TerminalRenderer {
             case RenderEvent.ScrollAutoReset() -> {
                 autoScroll = true;
                 scrollToBottom();
-                drawViewport();
+                dirtyViewportFull();
             }
             case RenderEvent.WindowResize(int c, int r) -> {
                 recalcLayout(inputLayout.editRows());
                 reflowAll();
-                drawFull();
+                dirtyAllRegions();
             }
             case RenderEvent.StatusUpdate(var ml, var mn, var st, int tc) -> {
                 this.modeLabel = ml;
@@ -174,17 +187,17 @@ public class TerminalRenderer {
                     this.statusText = st;
                 }
                 this.tokenCount = tc;
-                drawStatusBar();
+                dirty.add(DirtyRegion.STATUS_BAR);
             }
             case RenderEvent.PermissionPrompt(var req, var future) -> {
                 activePermissionPrompt = req;
                 permissionPromptSelection = req.selectedIndex();
-                drawPermissionPrompt();
+                dirty.add(DirtyRegion.PERMISSION_PROMPT);
             }
             case RenderEvent.PermissionPromptDismiss() -> {
                 activePermissionPrompt = null;
                 permissionPromptSelection = 0;
-                drawFull();
+                dirtyAllRegions(); // Task 7 降级为 VIEWPORT
             }
             case RenderEvent.ToolCallRender(var tcid, var tname, var params, var status) -> {
                 currentToolName = tname;
@@ -192,38 +205,76 @@ public class TerminalRenderer {
                 String paramsSummary = formatToolParams(tname, params);
                 int tw = Math.max(1, terminal.getWidth() - 3);
                 currentAIBlock.appendToolRow(tname, paramsSummary, status, null, true, tw);
-                drawFull();
+                flatCacheDirty = true;
+                dirtyAllRegions(); // Task 7 降级为 VIEWPORT
             }
             case RenderEvent.ToolResultRender(var tcid, var summary, boolean ok, int len) -> {
                 ensureAIBlock();
                 String toolName = currentToolName;
                 int tw = Math.max(1, terminal.getWidth() - 3);
                 currentAIBlock.appendToolRow(toolName, null, "done", summary, ok, tw);
-                drawFull();
+                flatCacheDirty = true;
+                dirtyAllRegions(); // Task 7 降级为 VIEWPORT
             }
             case RenderEvent.RefreshInputChrome(var done) -> {
-                redrawCurrentInputDraft();
-                if (done != null) done.countDown();
+                dirty.add(DirtyRegion.INPUT_AREA);
+                if (done != null) frameLatches.add(done);
             }
             case RenderEvent.UpdateInputDraft(var draft, int cursor, var done) -> {
                 currentDraft = draft != null ? draft : "";
                 currentCursorIndex = Math.max(0, Math.min(cursor, currentDraft.length()));
-                redrawCurrentInputDraft();
-                if (done != null) done.countDown();
+                dirty.add(DirtyRegion.INPUT_AREA);
+                if (done != null) frameLatches.add(done);
             }
-            case RenderEvent.RefreshAll() -> drawFull();
+            case RenderEvent.RefreshAll() -> dirtyAllRegions();
             case RenderEvent.CompletionMenu(var entries, int selected, boolean visible) -> {
                 completionEntries = entries;
                 completionSelectedIndex = selected;
                 completionVisible = visible;
-                drawViewport();
-                redrawCurrentInputDraft();
+                dirtyViewportFull();
+                dirty.add(DirtyRegion.COMPLETION_MENU);
             }
             case RenderEvent.CompletionEntry(var name, var description) -> {
                 // Completion entry rendering will be implemented in Task 12
             }
             case RenderEvent.Shutdown() -> { /* handled in run() */ }
         }
+    }
+
+    // ===== paintFrame: unified drawing based on dirty regions =====
+
+    void paintFrame() {
+        paintFrameCount++;
+        try {
+            if (dirty.isEmpty()) {
+                return;
+            }
+            if (dirty.size() == DirtyRegion.values().length) {
+                drawFull();
+            } else {
+                if (dirty.contains(DirtyRegion.STATUS_BAR)) drawStatusBar();
+                if (dirty.contains(DirtyRegion.VIEWPORT)) drawViewport();
+                if (dirty.contains(DirtyRegion.PERMISSION_PROMPT) && activePermissionPrompt != null) {
+                    drawPermissionPrompt();
+                }
+                if (dirty.contains(DirtyRegion.INPUT_AREA)) redrawCurrentInputDraft();
+                if (dirty.contains(DirtyRegion.COMPLETION_MENU)) drawCompletionMenu();
+            }
+        } finally {
+            dirty.clear();
+            for (var latch : frameLatches) {
+                latch.countDown();
+            }
+            frameLatches.clear();
+        }
+    }
+
+    private void dirtyAllRegions() {
+        dirty.addAll(EnumSet.allOf(DirtyRegion.class));
+    }
+
+    private void dirtyViewportFull() {
+        dirty.add(DirtyRegion.VIEWPORT);
     }
 
     // ===== drawing =====
@@ -529,15 +580,10 @@ public class TerminalRenderer {
         int aiWidth = Math.max(1, terminal.getWidth() - 3); // "│ " prefix(2) + scrollbar(1)
         currentAIBlock.append(text, aiWidth);
         appendLinesToFlatCache(currentAIBlock, oldCount);
-        int added = currentAIBlock.lineCount() - oldCount;
-        if (added > 0) {
-            int firstRow = STATUS_HEIGHT + (blockToGlobalRow(currentAIBlock) + oldCount - viewportStart);
-            drawDiff(firstRow, Math.min(added + 1, viewportHeight));
-        }
         if (autoScroll) {
             scrollToBottom();
-            drawViewport();
         }
+        dirtyViewportFull(); // Task 6 改为携带 ViewportHint
     }
 
     private void ensureAIBlock() {
@@ -580,8 +626,8 @@ public class TerminalRenderer {
         appendLinesToFlatCache(currentAIBlock, oldCount);
         if (autoScroll) {
             scrollToBottom();
-            drawViewport();
         }
+        dirtyViewportFull();
     }
 
     private void addBlock(Role role, String text) {
@@ -595,7 +641,7 @@ public class TerminalRenderer {
         blocks.add(block);
         flatCacheDirty = true;
         if (autoScroll) scrollToBottom();
-        drawViewport();
+        dirtyViewportFull();
     }
 
     // ===== scrolling =====
@@ -605,7 +651,7 @@ public class TerminalRenderer {
         viewportStart += delta;
         clampViewport();
         if (viewportStart != oldStart) {
-            drawViewport();
+            dirtyViewportFull();
         }
         autoScroll = viewportStart >= maxViewportStart();
     }
