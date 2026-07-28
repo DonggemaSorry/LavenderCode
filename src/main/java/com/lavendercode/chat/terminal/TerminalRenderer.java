@@ -41,6 +41,7 @@ public class TerminalRenderer {
     private List<LineWithRole> flatLineCache;
     private int[] blockStartLines;
     private boolean flatCacheDirty = true;
+    int rebuildCount; // 包级可见：测试用，统计全量重建次数
 
     private List<RenderEvent.CompletionEntry> completionEntries = List.of();
     private int completionSelectedIndex = 0;
@@ -527,7 +528,7 @@ public class TerminalRenderer {
         int oldCount = currentAIBlock.lineCount();
         int aiWidth = Math.max(1, terminal.getWidth() - 3); // "│ " prefix(2) + scrollbar(1)
         currentAIBlock.append(text, aiWidth);
-        flatCacheDirty = true;
+        appendLinesToFlatCache(currentAIBlock, oldCount);
         int added = currentAIBlock.lineCount() - oldCount;
         if (added > 0) {
             int firstRow = STATUS_HEIGHT + (blockToGlobalRow(currentAIBlock) + oldCount - viewportStart);
@@ -573,9 +574,10 @@ public class TerminalRenderer {
             blocks.add(currentAIBlock);
             flatCacheDirty = true;
         }
+        int oldCount = currentAIBlock.lineCount();
         int thinkWidth = Math.max(1, terminal.getWidth() - 5); // "│ " prefix(2) + indent(2) + scrollbar(1)
         currentAIBlock.appendThinking(text, thinkWidth);
-        flatCacheDirty = true;
+        appendLinesToFlatCache(currentAIBlock, oldCount);
         if (autoScroll) {
             scrollToBottom();
             drawViewport();
@@ -619,6 +621,7 @@ public class TerminalRenderer {
     // ===== helpers =====
 
     private void rebuildFlatCache() {
+        rebuildCount++;
         flatLineCache = new ArrayList<>();
         blockStartLines = new int[blocks.size()];
         int row = 0;
@@ -632,6 +635,48 @@ public class TerminalRenderer {
             row += lines.size();
         }
         flatCacheDirty = false;
+    }
+
+    /**
+     * 末尾追加路径的增量缓存维护：只有最后一个 block 行数增长，
+     * blockStartLines 不变，直接在 flatLineCache 尾部追加新行。
+     * 缓存失效或 block 非末尾时回退全量重建。
+     */
+    private void appendLinesToFlatCache(MessageBlock block, int oldCount) {
+        if (flatCacheDirty) {
+            rebuildFlatCache();
+            return;
+        }
+        if (blocks.isEmpty() || blocks.get(blocks.size() - 1) != block) {
+            flatCacheDirty = true;
+            rebuildFlatCache();
+            return;
+        }
+        List<RenderedLine> lines = block.allLines();
+        for (int j = oldCount; j < lines.size(); j++) {
+            flatLineCache.add(new LineWithRole(lines.get(j), block.role(), j == 0));
+        }
+    }
+
+    // ===== test observability (package-visible) =====
+
+    int rebuildCount() {
+        return rebuildCount;
+    }
+
+    void debugRebuildFlatCache() {
+        rebuildFlatCache();
+    }
+
+    int debugTotalLines() {
+        if (flatCacheDirty) rebuildFlatCache();
+        return flatLineCache.size();
+    }
+
+    String debugLineText(int globalIndex) {
+        if (flatCacheDirty) rebuildFlatCache();
+        var lw = getLineWithRole(globalIndex);
+        return lw == null ? null : lw.line().segments().toString();
     }
 
     private int totalContentLines() {
