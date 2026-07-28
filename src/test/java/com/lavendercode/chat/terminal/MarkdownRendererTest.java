@@ -83,4 +83,60 @@ class MarkdownRendererTest {
         List<RenderedLine> result = MarkdownRenderer.render("", 80);
         assertThat(result).isEmpty();
     }
+
+    @Test
+    void shouldRenderBasicTable() {
+        String md = "| Name | Age |\n|------|-----|\n| Alice | 30 |\n| Bob | 25 |";
+        List<RenderedLine> result = MarkdownRenderer.render(md, 80);
+        // Expect: header + separator + 2 body rows + bottom border = 5 lines
+        assertThat(result.size()).isGreaterThanOrEqualTo(5);
+
+        // Join all segments without newlines to check content
+        String allText = joinPlainText(result);
+        assertThat(allText).contains("\u2502"); // │
+        assertThat(allText).contains("\u2500"); // ─
+        assertThat(allText).contains("Alice");
+        assertThat(allText).contains("Bob");
+    }
+
+    @Test
+    void shouldRenderTableWithAlignment() {
+        String md = "| Left | Center | Right |\n|:-----|:------:|------:|\n| a | b | c |";
+        List<RenderedLine> result = MarkdownRenderer.render(md, 80);
+        assertThat(result.size()).isGreaterThanOrEqualTo(4);
+
+        String allText = joinPlainText(result);
+        assertThat(allText).contains("Left");
+        assertThat(allText).contains("Center");
+        assertThat(allText).contains("Right");
+    }
+
+    @Test
+    void shouldRenderTableWithCJKCharacters() {
+        String md = "| 模型 | 说明 |\n|------|------|\n| DeepSeek | 开源 |\n| Qwen | 中文强 |";
+        List<RenderedLine> result = MarkdownRenderer.render(md, 80);
+        assertThat(result.size()).isGreaterThanOrEqualTo(5);
+
+        String allText = joinPlainText(result);
+        assertThat(allText).contains("DeepSeek");
+        assertThat(allText).contains("\u6A21\u578B"); // 模型
+    }
+
+    @Test
+    void shouldRenderTableWithBodyOnly() {
+        String md = "| a | b |\n|---|---|\n| c | d |";
+        List<RenderedLine> result = MarkdownRenderer.render(md, 80);
+        assertThat(result.size()).isGreaterThanOrEqualTo(2);
+    }
+
+    /** Join all segment text from rendered lines without line breaks. */
+    private static String joinPlainText(List<RenderedLine> lines) {
+        StringBuilder sb = new StringBuilder();
+        for (RenderedLine line : lines) {
+            for (var seg : line.segments()) {
+                sb.append(seg.toString());
+            }
+        }
+        return sb.toString();
+    }
 }

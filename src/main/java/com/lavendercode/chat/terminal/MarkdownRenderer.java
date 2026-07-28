@@ -3,6 +3,12 @@ package com.lavendercode.chat.terminal;
 import com.vladsch.flexmark.ast.*;
 import com.vladsch.flexmark.ext.gfm.strikethrough.Strikethrough;
 import com.vladsch.flexmark.ext.gfm.strikethrough.StrikethroughExtension;
+import com.vladsch.flexmark.ext.tables.TableBlock;
+import com.vladsch.flexmark.ext.tables.TableBody;
+import com.vladsch.flexmark.ext.tables.TableCell;
+import com.vladsch.flexmark.ext.tables.TableHead;
+import com.vladsch.flexmark.ext.tables.TableRow;
+import com.vladsch.flexmark.ext.tables.TableSeparator;
 import com.vladsch.flexmark.ext.tables.TablesExtension;
 import com.vladsch.flexmark.parser.Parser;
 import com.vladsch.flexmark.util.ast.Document;
@@ -110,6 +116,10 @@ public final class MarkdownRenderer {
             acc.append(" ", acc.currentStyle());
         } else if (node instanceof HardLineBreak) {
             acc.finishLine();
+        } else if (node instanceof TableBlock) {
+            renderTable(node, acc);
+        } else if (node instanceof TableSeparator) {
+            // skip — handled by renderTable
         } else {
             walkChildren(node, acc);
         }
@@ -133,7 +143,162 @@ public final class MarkdownRenderer {
     private static final AttributedStyle LANG_STYLE =
         BASE_STYLE.foreground(136, 136, 136).background(40, 44, 52);
     private static final AttributedStyle STRIKE_STYLE = BASE_STYLE.crossedOut();
+    private static final AttributedStyle TABLE_STYLE = BASE_STYLE.foreground(180, 180, 180);
     private static final String BULLET = "\u2022";  // bullet character
+
+    // --- Table rendering ---
+
+    private static void renderTable(Node tableBlock, LineAccumulator acc) {
+        List<List<String>> headerRows = new ArrayList<>();
+        List<List<String>> bodyRows = new ArrayList<>();
+        List<TableCell.Alignment> alignments = new ArrayList<>();
+        int cols = 0;
+
+        Node child = tableBlock.getFirstChild();
+        while (child != null) {
+            if (child instanceof TableHead) {
+                Node row = child.getFirstChild();
+                while (row != null) {
+                    if (row instanceof TableRow) {
+                        List<String> cells = new ArrayList<>();
+                        Node cell = row.getFirstChild();
+                        while (cell != null) {
+                            if (cell instanceof TableCell tc) {
+                                cells.add(collectText(tc));
+                                if (alignments.size() < cells.size()) {
+                                    alignments.add(tc.getAlignment());
+                                }
+                            }
+                            cell = cell.getNext();
+                        }
+                        cols = Math.max(cols, cells.size());
+                        headerRows.add(cells);
+                    }
+                    row = row.getNext();
+                }
+            } else if (child instanceof TableBody) {
+                Node row = child.getFirstChild();
+                while (row != null) {
+                    if (row instanceof TableRow) {
+                        List<String> cells = new ArrayList<>();
+                        Node cell = row.getFirstChild();
+                        while (cell != null) {
+                            if (cell instanceof TableCell) {
+                                cells.add(collectText(cell));
+                            }
+                            cell = cell.getNext();
+                        }
+                        cols = Math.max(cols, cells.size());
+                        bodyRows.add(cells);
+                    }
+                    row = row.getNext();
+                }
+            }
+            child = child.getNext();
+        }
+
+        if (cols == 0) return;
+
+        // Normalize column count
+        while (alignments.size() < cols) alignments.add(null);
+        for (List<String> row : headerRows) while (row.size() < cols) row.add("");
+        for (List<String> row : bodyRows)    while (row.size() < cols) row.add("");
+
+        // Calculate column display widths (respect CJK 2-wide chars)
+        int[] colWidths = new int[cols];
+        for (List<String> row : headerRows)
+            for (int c = 0; c < cols; c++)
+                colWidths[c] = Math.max(colWidths[c], displayWidth(row.get(c)));
+        for (List<String> row : bodyRows)
+            for (int c = 0; c < cols; c++)
+                colWidths[c] = Math.max(colWidths[c], displayWidth(row.get(c)));
+        for (int c = 0; c < cols; c++)
+            colWidths[c] = Math.max(1, colWidths[c]);
+
+        int totalWidth = Arrays.stream(colWidths).sum() + (cols + 1);
+
+        // Header
+        for (List<String> row : headerRows) {
+            addTableLine("\u2502", row, colWidths, alignments, acc);
+            addHLine("\u251C", "\u253C", "\u2524", colWidths, totalWidth, acc);
+        }
+        // Body
+        for (int i = 0; i < bodyRows.size(); i++) {
+            addTableLine("\u2502", bodyRows.get(i), colWidths, alignments, acc);
+            if (i < bodyRows.size() - 1) {
+                addHLine("\u251C", "\u253C", "\u2524", colWidths, totalWidth, acc);
+            }
+        }
+        // Bottom border
+        addHLine("\u2514", "\u2534", "\u2518", colWidths, totalWidth, acc);
+    }
+
+    private static String collectText(Node node) {
+        StringBuilder sb = new StringBuilder();
+        Node child = node.getFirstChild();
+        while (child != null) {
+            if (child instanceof com.vladsch.flexmark.ast.Text) {
+                sb.append(child.getChars());
+            } else if (child instanceof Code) {
+                sb.append(child.getChars());
+            } else if (child instanceof SoftLineBreak) {
+                sb.append(' ');
+            } else {
+                sb.append(collectText(child));
+            }
+            child = child.getNext();
+        }
+        return sb.toString().trim();
+    }
+
+    private static void addTableLine(String border, List<String> cells,
+            int[] colWidths, List<TableCell.Alignment> alignments, LineAccumulator acc) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(border);
+        for (int c = 0; c < cells.size(); c++) {
+            sb.append(' ');
+            sb.append(padCell(cells.get(c), colWidths[c], alignments.get(c)));
+            sb.append(' ');
+            sb.append(border);
+        }
+        acc.append(sb.toString(), TABLE_STYLE);
+        acc.finishLine();
+    }
+
+    private static void addHLine(String left, String mid, String right,
+            int[] colWidths, int totalWidth, LineAccumulator acc) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(left);
+        for (int c = 0; c < colWidths.length; c++) {
+            if (c > 0) sb.append(mid);
+            sb.append("\u2500".repeat(colWidths[c] + 2));
+        }
+        sb.append(right);
+        acc.append(sb.toString(), TABLE_STYLE);
+        acc.finishLine();
+    }
+
+    private static String padCell(String text, int width, TableCell.Alignment align) {
+        int textWidth = displayWidth(text);
+        int padding = Math.max(0, width - textWidth);
+        if (align == TableCell.Alignment.CENTER) {
+            int left = padding / 2;
+            return " ".repeat(left) + text + " ".repeat(padding - left);
+        } else if (align == TableCell.Alignment.RIGHT) {
+            return " ".repeat(padding) + text;
+        }
+        return text + " ".repeat(padding);
+    }
+
+    private static int displayWidth(String s) {
+        int w = 0;
+        for (int i = 0; i < s.length(); ) {
+            int cp = s.codePointAt(i);
+            w += LineAccumulator.charWidthStatic(cp);
+            i += Character.charCount(cp);
+        }
+        return w;
+    }
 
     // --- Internal line accumulator ---
     private static class LineAccumulator {
@@ -223,7 +388,7 @@ public final class MarkdownRenderer {
             }
         }
 
-        int charWidth(int cp) {
+        static int charWidthStatic(int cp) {
             // 0-width: control, format, non-spacing marks
             int gc = Character.getType(cp);
             if (gc == Character.CONTROL || gc == Character.FORMAT
@@ -249,6 +414,10 @@ public final class MarkdownRenderer {
             // Variation selectors are 0-width
             if (cp >= 0xFE00 && cp <= 0xFE0F) return 0;
             return 1;
+        }
+
+        int charWidth(int cp) {
+            return charWidthStatic(cp);
         }
     }
 }
