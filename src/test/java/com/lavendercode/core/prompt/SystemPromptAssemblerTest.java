@@ -64,7 +64,7 @@ class SystemPromptAssemblerTest {
         assertThat(result).doesNotContain("custom-instructions");
         assertThat(result).doesNotContain("file-instructions");
         assertThat(result).doesNotContain("long-term-memory");
-        assertThat(result).endsWith("4. Keep output structured and readable.");
+        assertThat(result).endsWith("emoji characters correctly.");
     }
 
     @Test

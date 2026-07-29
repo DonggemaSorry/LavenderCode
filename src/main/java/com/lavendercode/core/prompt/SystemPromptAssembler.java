@@ -50,7 +50,9 @@ public class SystemPromptAssembler {
             1. Use Markdown formatting in responses.
             2. Use code blocks with appropriate language tags for code references.
             3. Use inline code for file names, function names, and short code snippets.
-            4. Keep output structured and readable.""")
+            4. Keep output structured and readable.
+            5. NEVER use emoji in any output. The terminal environment cannot render
+               emoji characters correctly.""")
     );
 
     public static String assemble(String customInstructions) {
