@@ -456,11 +456,8 @@ public class NetworkOrchestrator {
                     }
                     case InputEvent.HitlChoice hc -> hitlCoordinator.complete(hc.choice());
                     case InputEvent.CancelAgent __ -> handleCancelOrAdopt();
-                    case InputEvent.ScrollEvent se -> {
-                        RenderEvent scrollEvent = parseScrollEvent(se.command());
-                        if (scrollEvent != null) {
-                            safePut(scrollEvent);
-                        }
+                    case InputEvent.ScrollEvent __ -> {
+                        // Scroll events removed in native-scroll mode
                     }
                     case InputEvent.Shutdown __ -> {
                         handleShutdown();
@@ -818,18 +815,6 @@ public class NetworkOrchestrator {
             currentTimer.stop();
             currentTimer = null;
         }
-    }
-
-    RenderEvent parseScrollEvent(String args) {
-        return switch (args.trim().toLowerCase()) {
-            case "up"        -> new RenderEvent.ScrollDelta(-1);
-            case "down"      -> new RenderEvent.ScrollDelta(1);
-            case "page-up"   -> new RenderEvent.ScrollPageUp();
-            case "page-down" -> new RenderEvent.ScrollPageDown();
-            case "top"       -> new RenderEvent.ScrollTo(0);
-            case "bottom"    -> new RenderEvent.ScrollAutoReset();
-            default          -> null;
-        };
     }
 
     void safePut(RenderEvent event) {

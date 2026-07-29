@@ -55,10 +55,10 @@ class TerminalRendererInputDraftTest {
     }
 
     @Test
-    void fullRedrawPreservesCurrentDraft() {
+    void statusUpdatePreservesCurrentDraft() {
         renderer.handle(new RenderEvent.UpdateInputDraft("still typing", 12));
 
-        renderer.handle(new RenderEvent.RefreshAll());
+        renderer.handle(new RenderEvent.StatusUpdate("", "model", null, 0));
 
         assertThat(renderer.currentDraft()).isEqualTo("still typing");
         assertThat(renderer.currentCursorIndex()).isEqualTo(12);

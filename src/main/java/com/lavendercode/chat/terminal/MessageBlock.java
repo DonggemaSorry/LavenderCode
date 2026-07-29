@@ -58,6 +58,7 @@ public class MessageBlock {
     }
 
     public int appendThinking(String text, int terminalWidth) {
+        closePendingTable(terminalWidth); // 表格块被 thinking 打断视为闭合
         linesDirty = true;
         int oldCount = lineCount();
         ThinkingSegment last = findLastThinkingSegment();
@@ -70,6 +71,24 @@ public class MessageBlock {
         wrapAsThinking(last.rawText.toString(), terminalWidth, last.lines);
         recalcLineCount();
         return lineCount() - oldCount;
+    }
+
+    /**
+     * Flushes any buffered table rows into rendered lines. Called when the
+     * table block is closed by non-table content or the message stream ends.
+     */
+    public void closePendingTable(int terminalWidth) {
+        for (int i = segments.size() - 1; i >= 0; i--) {
+            if (segments.get(i) instanceof ContentSegment cs) {
+                if (!cs.tableBuffer.isEmpty()) {
+                    linesDirty = true;
+                    flushTableBuffer(cs, terminalWidth);
+                    cs.partialStart = cs.lines.size();
+                    recalcLineCount();
+                }
+                return;
+            }
+        }
     }
 
     public List<RenderedLine> allLines() {
@@ -95,7 +114,14 @@ public class MessageBlock {
                 cs.stableRawLength = 0;
                 cs.partialStart = 0;
                 cs.inCodeBlockAtStable = inCodeBlock;
+                cs.tableBuffer.clear(); // 重排时重新累积表格缓冲
                 rewrapFromStablePoint(cs, terminalWidth);
+                // 非末尾段或已完成消息：表格块已闭合，重排后直接输出
+                boolean lastSegment = seg == segments.get(segments.size() - 1);
+                if (!lastSegment || isComplete) {
+                    flushTableBuffer(cs, terminalWidth);
+                    cs.partialStart = cs.lines.size();
+                }
             } else if (seg instanceof ThinkingSegment ts) {
                 wrapAsThinking(ts.rawText.toString(), terminalWidth, ts.lines);
             }
@@ -161,7 +187,7 @@ public class MessageBlock {
         int lineStart = seg.stableRawLength;
         for (int i = lineStart; i < raw.length(); i++) {
             if (raw.charAt(i) == '\n') {
-                flushLineToOutput(raw.substring(lineStart, i), width, seg.lines);
+                flushLineToOutput(seg, raw.substring(lineStart, i), width);
                 lineStart = i + 1;
             }
         }
@@ -174,14 +200,34 @@ public class MessageBlock {
         }
     }
 
-    private void flushLineToOutput(String line, int width, List<RenderedLine> out) {
+    private void flushLineToOutput(ContentSegment seg, String line, int width) {
+        List<RenderedLine> out = seg.lines;
         if (line.startsWith("```")) {
+            flushTableBuffer(seg, width);
             out.add(new RenderedLine(new AttributedString(line,
                     AttributedStyle.DEFAULT.foreground(136, 136, 136))));
             inCodeBlock = !inCodeBlock;
             return;
         }
-        wrapByDisplayWidth(line, width, out, false);
+        if (inCodeBlock) {
+            wrapByDisplayWidth(line, width, out, false);
+            return;
+        }
+        if (LineMarkdownStyler.isTableRow(line)) {
+            // 表格块缓冲到闭合再输出：行先积累，整表闭合后统一对齐渲染
+            seg.tableBuffer.add(line);
+            return;
+        }
+        flushTableBuffer(seg, width);
+        // 逐行即时着色：行闭合时立即完成 Markdown 样式化，
+        // 原生滚动模式下已打印的行无法回头重绘。
+        out.addAll(LineMarkdownStyler.style(line, width));
+    }
+
+    private void flushTableBuffer(ContentSegment seg, int width) {
+        if (seg.tableBuffer.isEmpty()) return;
+        seg.lines.addAll(LineMarkdownStyler.styleTable(seg.tableBuffer, width));
+        seg.tableBuffer.clear();
     }
 
     private void wrapAsThinking(String raw, int width, List<RenderedLine> out) {
@@ -271,6 +317,7 @@ public class MessageBlock {
      */
     public int appendToolRow(String toolName, String paramsSummary, String status,
                               String resultSummary, boolean success, int terminalWidth) {
+        closePendingTable(terminalWidth); // 表格块被工具行打断视为闭合
         linesDirty = true;
         int oldCount = lineCount();
         ToolRowSegment seg = findOrCreateToolRow(toolName);
@@ -344,6 +391,7 @@ public class MessageBlock {
 
     private static final class ContentSegment extends Segment {
         final StringBuilder rawText = new StringBuilder();
+        final List<String> tableBuffer = new ArrayList<>(); // 已闭合但待整表渲染的表格行
         int stableRawLength;        // 最后一个已处理 '\n' 之后的位置
         int partialStart;           // 未闭合尾行在 lines 中的起始下标
         boolean inCodeBlockAtStable; // 稳定点处的代码块状态快照

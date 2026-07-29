@@ -33,32 +33,6 @@ class RenderEventTest {
         assertThat(e.text()).isEqualTo("err");
     }
 
-    // ---- ScrollTo ----
-    @Test
-    void scrollToShouldRejectNegativeIndex() {
-        assertThatThrownBy(() -> new RenderEvent.ScrollTo(-1))
-            .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void scrollToShouldAcceptZero() {
-        var e = new RenderEvent.ScrollTo(0);
-        assertThat(e.lineIndex()).isZero();
-    }
-
-    // ---- ScrollDelta ----
-    @Test
-    void scrollDeltaShouldStoreOffset() {
-        var e = new RenderEvent.ScrollDelta(5);
-        assertThat(e.offset()).isEqualTo(5);
-    }
-
-    // ---- ScrollAutoReset ----
-    @Test
-    void scrollAutoResetShouldInstantiate() {
-        assertThat(new RenderEvent.ScrollAutoReset()).isInstanceOf(RenderEvent.class);
-    }
-
     // ---- ClearChat ----
     @Test
     void clearChatShouldInstantiate() {
@@ -101,17 +75,6 @@ class RenderEventTest {
         assertThat(e.done()).isSameAs(latch);
     }
 
-    // ---- ScrollPageUp / ScrollPageDown ----
-    @Test
-    void scrollPageUpShouldInstantiate() {
-        assertThat(new RenderEvent.ScrollPageUp()).isInstanceOf(RenderEvent.class);
-    }
-
-    @Test
-    void scrollPageDownShouldInstantiate() {
-        assertThat(new RenderEvent.ScrollPageDown()).isInstanceOf(RenderEvent.class);
-    }
-
     // ---- UpdateInputDraft ----
     @Test
     void updateInputDraftShouldStoreFields() {
@@ -127,12 +90,6 @@ class RenderEventTest {
             .isInstanceOf(IllegalArgumentException.class);
     }
 
-    // ---- RefreshAll ----
-    @Test
-    void refreshAllShouldInstantiate() {
-        assertThat(new RenderEvent.RefreshAll()).isInstanceOf(RenderEvent.class);
-    }
-
     // ---- Shutdown ----
     @Test
     void shutdownShouldInstantiate() {
@@ -144,7 +101,7 @@ class RenderEventTest {
     void shouldBeSealedInterface() {
         assertThat(new RenderEvent.AppendToMessage("x")).isInstanceOf(RenderEvent.class);
         assertThat(new RenderEvent.FinalizeMessage()).isInstanceOf(RenderEvent.class);
-        assertThat(new RenderEvent.ScrollDelta(1)).isInstanceOf(RenderEvent.class);
+        assertThat(new RenderEvent.ClearChat()).isInstanceOf(RenderEvent.class);
         assertThat(new RenderEvent.Shutdown()).isInstanceOf(RenderEvent.class);
     }
 

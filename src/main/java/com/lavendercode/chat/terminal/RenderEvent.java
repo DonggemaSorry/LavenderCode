@@ -13,11 +13,6 @@ public sealed interface RenderEvent
             RenderEvent.FinalizeMessage,
             RenderEvent.AddUserMessage,
             RenderEvent.AddSystemMessage,
-            RenderEvent.ScrollTo,
-            RenderEvent.ScrollDelta,
-            RenderEvent.ScrollPageUp,
-            RenderEvent.ScrollPageDown,
-            RenderEvent.ScrollAutoReset,
             RenderEvent.ClearChat,
             RenderEvent.WindowResize,
             RenderEvent.StatusUpdate,
@@ -25,7 +20,6 @@ public sealed interface RenderEvent
             RenderEvent.ToolResultRender,
             RenderEvent.RefreshInputChrome,
             RenderEvent.UpdateInputDraft,
-            RenderEvent.RefreshAll,
             RenderEvent.CompletionMenu,
             RenderEvent.CompletionEntry,
             RenderEvent.PermissionPrompt,
@@ -45,20 +39,6 @@ public sealed interface RenderEvent
     record AddSystemMessage(String text) implements RenderEvent {
         public AddSystemMessage { Objects.requireNonNull(text); }
     }
-
-    record ScrollTo(int lineIndex) implements RenderEvent {
-        public ScrollTo {
-            if (lineIndex < 0) throw new IllegalArgumentException("lineIndex must be >= 0");
-        }
-    }
-
-    record ScrollDelta(int offset) implements RenderEvent {}
-
-    record ScrollPageUp() implements RenderEvent {}
-
-    record ScrollPageDown() implements RenderEvent {}
-
-    record ScrollAutoReset() implements RenderEvent {}
 
     record ClearChat() implements RenderEvent {}
 
@@ -104,8 +84,6 @@ public sealed interface RenderEvent
 
     record ToolCallRender(String toolCallId, String toolName, Map<String, Object> params, String status) implements RenderEvent {}
     record ToolResultRender(String toolCallId, String summary, boolean success, int contentLength) implements RenderEvent {}
-
-    record RefreshAll() implements RenderEvent {}
 
     record CompletionMenu(
         List<CompletionEntry> entries,

@@ -64,4 +64,41 @@ class TerminalRendererFrameTest {
 
         assertThat(latch.getCount()).isZero();
     }
+
+    @Test
+    void finalizeMessageAfterStreamingShouldNotThrow() {
+        renderer.handle(new RenderEvent.AppendToMessage("partial line without newline"));
+
+        renderer.handle(new RenderEvent.FinalizeMessage());
+
+        assertThat(renderer.blockCount()).isEqualTo(1);
+    }
+
+    @Test
+    void finalizeMessageWithoutContentShouldNotThrow() {
+        renderer.handle(new RenderEvent.FinalizeMessage());
+
+        assertThat(renderer.blockCount()).isZero();
+    }
+
+    @Test
+    void statusUpdateDuringStreamingShouldNotThrow() {
+        renderer.handle(new RenderEvent.AppendToMessage("streaming partial"));
+        renderer.handle(new RenderEvent.StatusUpdate("default", "model", null, 42));
+        renderer.handle(new RenderEvent.AppendToMessage(" more text\n"));
+        renderer.handle(new RenderEvent.FinalizeMessage());
+
+        assertThat(renderer.blockCount()).isEqualTo(1);
+    }
+
+    @Test
+    void streamingTableShouldFinalizeWithoutError() {
+        // 逐块流式输入表格：行闭合后进入缓冲会使 block 行数回缩
+        renderer.handle(new RenderEvent.AppendToMessage("| a | b |"));
+        renderer.handle(new RenderEvent.AppendToMessage("\n| --- | --- |\n"));
+        renderer.handle(new RenderEvent.AppendToMessage("| 1 | 2 |\n"));
+        renderer.handle(new RenderEvent.FinalizeMessage());
+
+        assertThat(renderer.blockCount()).isEqualTo(1);
+    }
 }
