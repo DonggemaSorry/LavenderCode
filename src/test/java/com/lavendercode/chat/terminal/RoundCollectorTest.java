@@ -77,4 +77,41 @@ class RoundCollectorTest {
         assertThat(result.cacheCreationTokens()).isEqualTo(3);
         assertThat(result.cacheReadTokens()).isEqualTo(8);
     }
+
+    @Test
+    void shouldCloseIteratorOnStreamComplete() {
+        // 回归：正常完成路径不 close 会泄漏 OkHttp 连接
+        var iter = mock(StreamEventIterator.class);
+        when(iter.hasNext()).thenReturn(true, false);
+        when(iter.next()).thenReturn(new StreamEvent.StreamComplete());
+        var rc = new RoundCollector(e -> { });
+
+        rc.consume(iter, new AtomicBoolean(false));
+
+        verify(iter).close();
+    }
+
+    @Test
+    void shouldCloseIteratorOnNaturalExhaustion() {
+        var iter = mock(StreamEventIterator.class);
+        when(iter.hasNext()).thenReturn(true, false);
+        when(iter.next()).thenReturn(new StreamEvent.ContentDelta("x"));
+        var rc = new RoundCollector(e -> { });
+
+        rc.consume(iter, new AtomicBoolean(false));
+
+        verify(iter).close();
+    }
+
+    @Test
+    void shouldCloseIteratorOnStreamError() {
+        var iter = mock(StreamEventIterator.class);
+        when(iter.hasNext()).thenReturn(true, false);
+        when(iter.next()).thenReturn(new StreamEvent.StreamError("boom", 500));
+        var rc = new RoundCollector(e -> { });
+
+        rc.consume(iter, new AtomicBoolean(false));
+
+        verify(iter, atLeastOnce()).close();
+    }
 }

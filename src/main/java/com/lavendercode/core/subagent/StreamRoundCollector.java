@@ -16,43 +16,42 @@ final class StreamRoundCollector {
     private String error;
 
     SubAgentRoundResult consume(StreamEventIterator iter, AtomicBoolean cancelFlag) {
-        while (iter.hasNext() && !cancelFlag.get()) {
-            StreamEvent se = iter.next();
-            switch (se) {
-                case StreamEvent.ContentDelta cd -> {
-                    fullText.append(cd.text());
-                    if (fullText.length() > MAX_TEXT_CHARS) {
-                        error = "stream text exceeded " + MAX_TEXT_CHARS + " chars";
-                        iter.close();
+        // finally 兜底关闭：任何退出路径都必须释放 HTTP 连接（close 幂等）
+        try {
+            while (iter.hasNext() && !cancelFlag.get()) {
+                StreamEvent se = iter.next();
+                switch (se) {
+                    case StreamEvent.ContentDelta cd -> {
+                        fullText.append(cd.text());
+                        if (fullText.length() > MAX_TEXT_CHARS) {
+                            error = "stream text exceeded " + MAX_TEXT_CHARS + " chars";
+                            return finish();
+                        }
+                    }
+                    case StreamEvent.ToolCallStart tcs -> accumulator.start(tcs.toolCallId(), tcs.toolName());
+                    case StreamEvent.ToolCallDelta tcd -> accumulator.append(tcd.toolCallId(), tcd.jsonFragment());
+                    case StreamEvent.ToolCallEnd tce -> {
+                        ToolCall call = accumulator.complete(tce.toolCallId());
+                        if (call == null) {
+                            call = new ToolCall(tce.toolCallId(), tce.toolName(), tce.parameters());
+                        }
+                        completedCalls.add(call);
+                    }
+                    case StreamEvent.StreamError err -> {
+                        error = err.message();
                         return finish();
                     }
-                }
-                case StreamEvent.ToolCallStart tcs -> accumulator.start(tcs.toolCallId(), tcs.toolName());
-                case StreamEvent.ToolCallDelta tcd -> accumulator.append(tcd.toolCallId(), tcd.jsonFragment());
-                case StreamEvent.ToolCallEnd tce -> {
-                    ToolCall call = accumulator.complete(tce.toolCallId());
-                    if (call == null) {
-                        call = new ToolCall(tce.toolCallId(), tce.toolName(), tce.parameters());
+                    case StreamEvent.StreamComplete sc -> {
+                        return finish();
                     }
-                    completedCalls.add(call);
+                    case StreamEvent.Usage u -> { /* ignore */ }
+                    case StreamEvent.ThinkingDelta td -> { /* ignore */ }
                 }
-                case StreamEvent.StreamError err -> {
-                    error = err.message();
-                    iter.close();
-                    return finish();
-                }
-                case StreamEvent.StreamComplete sc -> {
-                    iter.close();
-                    return finish();
-                }
-                case StreamEvent.Usage u -> { /* ignore */ }
-                case StreamEvent.ThinkingDelta td -> { /* ignore */ }
             }
-        }
-        if (cancelFlag.get()) {
+            return finish();
+        } finally {
             iter.close();
         }
-        return finish();
     }
 
     private SubAgentRoundResult finish() {
