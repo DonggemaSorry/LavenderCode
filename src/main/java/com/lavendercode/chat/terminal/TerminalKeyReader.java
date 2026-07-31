@@ -31,6 +31,10 @@ final class TerminalKeyReader {
 
     TerminalInput readInput() throws IOException {
         int c = terminal.reader().read();
+        if (c < 0) {
+            // EOF / terminal 已关闭：必须映射为 Exit，否则调用方会把 -1 当普通字符忽略并忙自旋
+            return new TerminalInput.Exit();
+        }
         if (c == '\r') {
             consumeLfIfPresent();
             return new TerminalInput.Submit();

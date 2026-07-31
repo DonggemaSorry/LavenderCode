@@ -121,6 +121,10 @@ public class InputSystem {
         publishDraft(buffer.toString(), cursor);
 
         while (true) {
+            if (shutdown.get()) {
+                // 关停时序兼容：/exit 后 requestShutdown 已置位，读循环不得继续自旋
+                return null;
+            }
             TerminalInput input = keyReader.readInput();
 
             if (hitlCoordinator != null && hitlCoordinator.isAwaiting()) {
